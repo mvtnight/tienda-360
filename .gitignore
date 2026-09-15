@@ -1,0 +1,28 @@
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editores
+.idea/
+*.iml
+.vscode/
+
+# Logs
+*.log
+
+# Java / Maven
+target/
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+out/
+
+# IDE / misc
+*.local
+
+# Ejecutables de build locales
+*.jar
+!infra/**/*.jar

@@ -1,0 +1,187 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Pedidos360 - ALB + Auto Scaling de instancias EC2 con el backend Spring Boot
+  (pedidos360-backend). La instancia baja el jar desde S3 y lo ejecuta como
+  servicio systemd.
+
+Parameters:
+  EnvName:
+    Type: String
+    Default: dev
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Key pair para SSH
+  InstanceType:
+    Type: String
+    Default: t3.small
+  S3Bucket:
+    Type: String
+    Description: Bucket S3 donde se sube pedidos360-backend.jar
+  S3Key:
+    Type: String
+    Default: pedidos360-backend.jar
+  TenantId:
+    Type: String
+    Description: Directory (tenant) ID de Azure AD
+  ApiClientId:
+    Type: String
+    Description: Client ID de la app "pedidos-api"
+  SecurityGroupIdExternal:
+    Type: String
+    Description: SG que permite el tráfico de datos hacia el backend (puede ser el del API Gateway/BFF)
+
+Resources:
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Segmento del backend de pedidos360
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8090
+          ToPort: 8090
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub 'pedidos360-alb-${EnvName}'
+      Scheme: internet-facing
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !Ref BackendSecurityGroup
+      Type: application
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub 'pedidos360-tg-${EnvName}'
+      VpcId: !Ref VpcId
+      Port: 8090
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckEnabled: true
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: get-jar
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::${S3Bucket}/${S3Key}'
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub 'pedidos360-lt-${EnvName}'
+      LaunchTemplateData:
+        ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref BackendSecurityGroup
+        UserData:
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              set -euxo pipefail
+
+              dnf install -y java-21-amazon-corretto aws-cli || true
+
+              mkdir -p /opt/pedidos360
+              aws s3 cp s3://${S3Bucket}/${S3Key} /opt/pedidos360/pedidos360-backend.jar
+
+              cat > /etc/pedidos360.env <<'ENVEOF'
+              AZURE_TENANT_ID=${TenantId}
+              AZURE_EXPOSED_APP_CLIENT_ID=${ApiClientId}
+              AZURE_EXPOSED_APP_URI=api://${ApiClientId}
+              CORS_ALLOWED_ORIGINS=https://TU_SPA_DOMAIN
+              PEDIDOS_API_URL=http://localhost:8090
+              ENVEOF
+
+              chmod 600 /etc/pedidos360.env
+
+              cat > /etc/systemd/system/pedidos360-backend.service <<'UNITEOF'
+              [Unit]
+              Description=Pedidos360 Backend
+              After=network-online.target
+              [Service]
+              User=ec2-user
+              EnvironmentFile=/etc/pedidos360.env
+              ExecStart=/usr/bin/java -jar /opt/pedidos360/pedidos360-backend.jar
+              Restart=always
+              RestartSec=5
+              [Install]
+              WantedBy=multi-user.target
+              UNITEOF
+
+              systemctl daemon-reload
+              systemctl enable pedidos360-backend
+              systemctl start pedidos360-backend
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub 'pedidos360-asg-${EnvName}'
+      VPCZoneIdentifier: !Ref SubnetIds
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 90
+
+Outputs:
+  ALBDnsName:
+    Description: DNS del ALB para configurar el API Gateway
+    Value: !GetAtt LoadBalancer.DNSName
