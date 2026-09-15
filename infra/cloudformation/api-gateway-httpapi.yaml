@@ -1,7 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  Pedidos360 - Amazon API Gateway HTTP API que valida el JWT de Azure AD
-  (mismo issuer/audience que el BFF) y proxya a un ALB.
+  Pedidos360 - Amazon API Gateway HTTP API (API Manager). Expone rutas explícitas
+  por recurso, habilita CORS para el frontend y valida el JWT de Azure AD (mismo
+  issuer/audience que el BFF) en TODAS las rutas. Un token válido sin el scope
+  'access_as_user' recibe 403; sin token o con token inválido recibe 401.
 
 Parameters:
   EnvName:
@@ -15,16 +17,35 @@ Parameters:
     Description: Client ID (Application ID) de la app "pedidos-api"
   ALBDnsName:
     Type: String
-    Description: DNS name del Application Load Balancer del backend, p.ej. pedidos360-alb-xxxx.us-east-1.elb.amazonaws.com
+    Description: DNS del ALB del backend, p.ej. pedidos360-alb-xxxx.us-east-1.elb.amazonaws.com
+  SpaOrigin:
+    Type: String
+    Default: http://localhost:4200
+    Description: Origen de la SPA habilitado por CORS en el API Manager
 
 Resources:
   Api:
     Type: AWS::ApiGatewayV2::Api
     Properties:
       Name: !Sub 'pedidos360-httpapi-${EnvName}'
-      Description: Gateway de Pedidos360 - valida JWT Azure AD antes de llegar al BFF/backend
+      Description: API Manager de Pedidos360 - valida JWT Azure AD y proxya a los microservicios
       ProtocolType: HTTP
       DisableExecuteApiEndpoint: false
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref SpaOrigin
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - '*'
+        ExposeHeaders:
+          - Authorization
+        MaxAge: 3600
+        AllowCredentials: false
 
   Authorizer:
     Type: AWS::ApiGatewayV2::Authorizer
@@ -39,6 +60,19 @@ Resources:
         Issuer: !Sub 'https://login.microsoftonline.com/${TenantId}/v2.0'
       Name: pedidos360-jwt-authorizer
 
+  # Integración para rutas fijas: sin path en la URI, el request path se reenvía tal cual.
+  BackendIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      PayloadFormatVersion: '1.0'
+      ConnectionType: INTERNET
+      Description: Reenvío al backend vía ALB (path completo del request)
+      Uri: !Sub 'http://${ALBDnsName}'
+
+  # Catch-all de respaldo para cualquier ruta no declarada (siempre JWT protegida).
   ProxyIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
@@ -47,8 +81,74 @@ Resources:
       IntegrationMethod: ANY
       PayloadFormatVersion: '1.0'
       ConnectionType: INTERNET
-      Description: Forwarding al ALB del backend
+      Description: Reenvío catch-all al backend vía ALB
       Uri: !Sub 'http://${ALBDnsName}/{proxy}'
+
+  HealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: 'GET /health'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref Authorizer
+      AuthorizationScopes:
+        - access_as_user
+      Target: !Sub 'integrations/${BackendIntegration}'
+
+  ListPedidosRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: 'GET /api/pedidos'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref Authorizer
+      AuthorizationScopes:
+        - access_as_user
+      Target: !Sub 'integrations/${BackendIntegration}'
+
+  GetPedidoRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: 'GET /api/pedidos/{id}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref Authorizer
+      AuthorizationScopes:
+        - access_as_user
+      Target: !Sub 'integrations/${BackendIntegration}'
+
+  CreatePedidoRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: 'POST /api/pedidos'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref Authorizer
+      AuthorizationScopes:
+        - access_as_user
+      Target: !Sub 'integrations/${BackendIntegration}'
+
+  UpdateEstadoRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: 'PATCH /api/pedidos/{id}/estado'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref Authorizer
+      AuthorizationScopes:
+        - access_as_user
+      Target: !Sub 'integrations/${BackendIntegration}'
+
+  DeletePedidoRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: 'DELETE /api/pedidos/{id}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref Authorizer
+      AuthorizationScopes:
+        - access_as_user
+      Target: !Sub 'integrations/${BackendIntegration}'
 
   ProxyRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -57,13 +157,8 @@ Resources:
       RouteKey: 'ANY /{proxy+}'
       AuthorizationType: JWT
       AuthorizerId: !Ref Authorizer
-      Target: !Sub 'integrations/${ProxyIntegration}'
-
-  RootRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref Api
-      RouteKey: 'GET /'
+      AuthorizationScopes:
+        - access_as_user
       Target: !Sub 'integrations/${ProxyIntegration}'
 
   Stage:
@@ -75,5 +170,8 @@ Resources:
 
 Outputs:
   ApiEndpoint:
-    Description: Endpoint del API Gateway (usar como PEDIDOS_API_URL en el BFF / bffUrl en el SPA)
+    Description: Endpoint del API Manager (usar como PEDIDOS_API_URL en el BFF / bffUrl en el SPA)
     Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod'
+  ApiId:
+    Description: ID del API Manager
+    Value: !Ref Api

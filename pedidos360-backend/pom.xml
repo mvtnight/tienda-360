@@ -62,6 +62,7 @@
     </dependencies>
 
     <build>
+        <finalName>pedidos360-backend</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

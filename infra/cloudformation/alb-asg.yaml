@@ -30,21 +30,36 @@ Parameters:
   ApiClientId:
     Type: String
     Description: Client ID de la app "pedidos-api"
-  SecurityGroupIdExternal:
+  SpaOrigin:
     Type: String
-    Description: SG que permite el tráfico de datos hacia el backend (puede ser el del API Gateway/BFF)
+    Default: http://localhost:4200
+    Description: Origen de la SPA (CORS del backend)
 
 Resources:
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Segmento del ALB (recibe a clientes / API Manager)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+
   BackendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Segmento del backend de pedidos360
+      GroupDescription: Segmento del backend de pedidos360 (solo accesible desde el ALB)
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 8090
           ToPort: 8090
-          CidrIp: 0.0.0.0/0
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
       SecurityGroupEgress:
         - IpProtocol: '-1'
           CidrIp: 0.0.0.0/0
@@ -56,7 +71,7 @@ Resources:
       Scheme: internet-facing
       Subnets: !Ref SubnetIds
       SecurityGroups:
-        - !Ref BackendSecurityGroup
+        - !Ref LoadBalancerSecurityGroup
       Type: application
 
   TargetGroup:
@@ -141,8 +156,7 @@ Resources:
               AZURE_TENANT_ID=${TenantId}
               AZURE_EXPOSED_APP_CLIENT_ID=${ApiClientId}
               AZURE_EXPOSED_APP_URI=api://${ApiClientId}
-              CORS_ALLOWED_ORIGINS=https://TU_SPA_DOMAIN
-              PEDIDOS_API_URL=http://localhost:8090
+              CORS_ALLOWED_ORIGINS=${SpaOrigin}
               ENVEOF
 
               chmod 600 /etc/pedidos360.env

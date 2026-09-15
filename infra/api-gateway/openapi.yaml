@@ -1,41 +1,117 @@
 openapi: 3.0.1
+# Pedidos360 API Manager (Amazon API Gateway HTTP API).
+# Fuente de verdad: infra/cloudformation/api-gateway-httpapi.yaml
+# Este documento es la referencia de rutas/seguridad: todas las rutas validan
+# JWT (issuer/audience de Azure AD) y exigen el scope 'access_as_user' ->
+# sin token 401, token inválido 401, token válido sin scope 403.
 info:
-  title: Pedidos360 API (Amazon API Gateway HTTP API)
+  title: Pedidos360 API Manager
   description: >
-    API HTTP (Gateway) que envía /api/pedidos al BFF de pedidos. El API Gateway
-    valida el JWT (JWT authorizer) con el MISMO issuer y audience que el BFF:
-      issuer   -> https://login.microsoftonline.com/<TENANT_ID>/v2.0
-      audience -> api://<PEDIDOS_API_CLIENT_ID>
-    Si el token es inválido o falta, responde 401 sin llegar al backend.
+    API HTTP que sirve de intermediario entre el frontend y el backend de
+    pedidos360. Valida el JWT de Azure AD (mismo issuer/audience que el BFF)
+    en todas las rutas y habilita CORS para la SPA.
   version: 1.0.0
 
 servers:
-  - url: https://<api-id>.execute-api.<region>.amazonaws.com
+  - url: https://<api-id>.execute-api.<region>.amazonaws.com/prod
+
+x-amazon-apigateway-cors:
+  allowOrigins:
+    - http://localhost:4200
+  allowMethods:
+    - GET
+    - POST
+    - PATCH
+    - DELETE
+    - OPTIONS
+  allowHeaders:
+    - '*'
+  exposeHeaders:
+    - Authorization
+  maxAge: 3600
+  allowCredentials: false
+  authorizeCors: true
 
 paths:
-  /:
+  /health:
     get:
-      responses:
-        '200':
-          description: BFF health check
+      security:
+        - PedidosJwtAuthorizer:
+            - access_as_user
       x-amazon-apigateway-integration:
         type: http_proxy
         httpMethod: GET
-        uri: http://<ALB-DNS>/health
+        uri: http://<ALB-DNS>
+        payloadFormatVersion: '1.0'
+        connectionType: INTERNET
+
+  /api/pedidos:
+    get:
+      security:
+        - PedidosJwtAuthorizer:
+            - access_as_user
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        uri: http://<ALB-DNS>
+        payloadFormatVersion: '1.0'
+        connectionType: INTERNET
+    post:
+      security:
+        - PedidosJwtAuthorizer:
+            - access_as_user
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: POST
+        uri: http://<ALB-DNS>
+        payloadFormatVersion: '1.0'
+        connectionType: INTERNET
+
+  /api/pedidos/{id}:
+    get:
+      security:
+        - PedidosJwtAuthorizer:
+            - access_as_user
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        uri: http://<ALB-DNS>
+        payloadFormatVersion: '1.0'
+        connectionType: INTERNET
+    delete:
+      security:
+        - PedidosJwtAuthorizer:
+            - access_as_user
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: DELETE
+        uri: http://<ALB-DNS>
+        payloadFormatVersion: '1.0'
+        connectionType: INTERNET
+
+  /api/pedidos/{id}/estado:
+    patch:
+      security:
+        - PedidosJwtAuthorizer:
+            - access_as_user
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: PATCH
+        uri: http://<ALB-DNS>
         payloadFormatVersion: '1.0'
         connectionType: INTERNET
 
   /{proxy+}:
     x-amazon-apigateway-any-method:
       security:
-        - PedidosJwtAuthorizer: []
+        - PedidosJwtAuthorizer:
+            - access_as_user
       x-amazon-apigateway-integration:
         type: http_proxy
         httpMethod: ANY
         uri: http://<ALB-DNS>/{proxy}
         payloadFormatVersion: '1.0'
         connectionType: INTERNET
-      responses: {}
 
 components:
   securitySchemes:

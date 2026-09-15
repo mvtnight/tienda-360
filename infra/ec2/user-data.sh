@@ -12,8 +12,7 @@ cat > /etc/pedidos360.env <<'ENVEOF'
 AZURE_TENANT_ID=${TenantId}
 AZURE_EXPOSED_APP_CLIENT_ID=${ApiClientId}
 AZURE_EXPOSED_APP_URI=api://${ApiClientId}
-CORS_ALLOWED_ORIGINS=https://TU_SPA_DOMAIN
-PEDIDOS_API_URL=http://localhost:8090
+CORS_ALLOWED_ORIGINS=http://localhost:4200
 ENVEOF
 chmod 600 /etc/pedidos360.env
 
