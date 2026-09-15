@@ -1,8 +1,8 @@
 param(
     [string]$Region   = "us-east-2",
     [string]$VpcId    = "vpc-0244fc236a6eb21dc",
-    [string]$Subnet1  = "subnet-05b764aa3683a98b2",
-    [string]$Subnet2  = "subnet-099e302406e34ee80",
+    [string]$Subnet1  = "subnet-03251d8d1fa4a3af2",
+    [string]$Subnet2  = "subnet-09cceb5a59068a67f",
     [string]$KeyName  = "pedidos360-key",
     [string]$Bucket   = "pedidos360-matiaspulgar",
     [string]$S3Key    = "pedidos360-backend.jar",
@@ -31,7 +31,7 @@ aws cloudformation deploy `
     --stack-name pedidos360-alb `
     --region $Region `
     --capabilities CAPABILITY_NAMED_IAM `
-    --parameter-overrides "EnvName=dev VpcId=$VpcId SubnetIds=$Subnet1,$Subnet2 KeyName=$KeyName S3Bucket=$Bucket S3Key=$S3Key TenantId=$TenantId ApiClientId=$ApiClientId SpaOrigin=$SpaOrigin"
+    --parameter-overrides "EnvName=dev" "VpcId=$VpcId" "SubnetIds=$Subnet1,$Subnet2" "KeyName=$KeyName" "S3Bucket=$Bucket" "S3Key=$S3Key" "TenantId=$TenantId" "ApiClientId=$ApiClientId" "SpaOrigin=$SpaOrigin"
 if ($LASTEXITCODE -ne 0) { Write-Error "Fallo en el stack alb-asg." }
 
 $albdns = aws cloudformation describe-stacks `
@@ -48,7 +48,7 @@ aws cloudformation deploy `
     --stack-name pedidos360-httpapi `
     --region $Region `
     --capabilities CAPABILITY_IAM `
-    --parameter-overrides "EnvName=dev TenantId=$TenantId ApiClientId=$ApiClientId ALBDnsName=$albdns SpaOrigin=$SpaOrigin"
+    --parameter-overrides "EnvName=dev" "TenantId=$TenantId" "ApiClientId=$ApiClientId" "ALBDnsName=$albdns" "SpaOrigin=$SpaOrigin"
 if ($LASTEXITCODE -ne 0) { Write-Error "Fallo en el stack api-gateway." }
 
 $api = aws cloudformation describe-stacks `

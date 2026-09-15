@@ -60,29 +60,50 @@ Resources:
         Issuer: !Sub 'https://login.microsoftonline.com/${TenantId}/v2.0'
       Name: pedidos360-jwt-authorizer
 
-  # Integración para rutas fijas: sin path en la URI, el request path se reenvía tal cual.
-  BackendIntegration:
+  # Integraciones por método (HTTP_PROXY): sin path en la URI, el request path se reenvía tal cual.
+  GetIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref Api
       IntegrationType: HTTP_PROXY
-      IntegrationMethod: ANY
+      IntegrationMethod: GET
       PayloadFormatVersion: '1.0'
       ConnectionType: INTERNET
-      Description: Reenvío al backend vía ALB (path completo del request)
-      Uri: !Sub 'http://${ALBDnsName}'
+      Description: GET al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}'
 
-  # Catch-all de respaldo para cualquier ruta no declarada (siempre JWT protegida).
-  ProxyIntegration:
+  PostIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref Api
       IntegrationType: HTTP_PROXY
-      IntegrationMethod: ANY
+      IntegrationMethod: POST
       PayloadFormatVersion: '1.0'
       ConnectionType: INTERNET
-      Description: Reenvío catch-all al backend vía ALB
-      Uri: !Sub 'http://${ALBDnsName}/{proxy}'
+      Description: POST al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}'
+
+  PatchIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: PATCH
+      PayloadFormatVersion: '1.0'
+      ConnectionType: INTERNET
+      Description: PATCH al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}'
+
+  DeleteIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: DELETE
+      PayloadFormatVersion: '1.0'
+      ConnectionType: INTERNET
+      Description: DELETE al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}'
 
   HealthRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -93,7 +114,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${BackendIntegration}'
+      Target: !Sub 'integrations/${GetIntegration}'
 
   ListPedidosRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -104,7 +125,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${BackendIntegration}'
+      Target: !Sub 'integrations/${GetIntegration}'
 
   GetPedidoRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -115,7 +136,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${BackendIntegration}'
+      Target: !Sub 'integrations/${GetIntegration}'
 
   CreatePedidoRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -126,7 +147,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${BackendIntegration}'
+      Target: !Sub 'integrations/${PostIntegration}'
 
   UpdateEstadoRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -137,7 +158,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${BackendIntegration}'
+      Target: !Sub 'integrations/${PatchIntegration}'
 
   DeletePedidoRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -148,18 +169,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${BackendIntegration}'
-
-  ProxyRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref Api
-      RouteKey: 'ANY /{proxy+}'
-      AuthorizationType: JWT
-      AuthorizerId: !Ref Authorizer
-      AuthorizationScopes:
-        - access_as_user
-      Target: !Sub 'integrations/${ProxyIntegration}'
+      Target: !Sub 'integrations/${DeleteIntegration}'
 
   Stage:
     Type: AWS::ApiGatewayV2::Stage
