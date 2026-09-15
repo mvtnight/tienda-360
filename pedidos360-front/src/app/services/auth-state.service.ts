@@ -7,7 +7,7 @@ function decodeRolesFromAccessToken(token: string): string[] {
   try {
     const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     const roles: unknown = payload['roles'];
-    return Array.isArray(roles) ? (roles as string[]) : [];
+    return Array.isArray(roles) ? (roles as string[]).map((r) => r.toUpperCase()) : [];
   } catch {
     return [];
   }

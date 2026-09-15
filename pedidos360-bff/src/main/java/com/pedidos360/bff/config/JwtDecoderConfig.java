@@ -38,8 +38,11 @@ public class JwtDecoderConfig {
                 .jwsAlgorithms(algorithms -> algorithms.retainAll(Set.of(SignatureAlgorithm.RS256)))
                 .build();
 
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(issuer),
+decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefault(),
+                new JwtClaimValidator<Object>("iss", iss -> iss != null
+                        && (iss.equals(issuer)
+                                || iss.equals("https://sts.windows.net/" + tenantId + "/"))),
                 new JwtClaimValidator<List<?>>("aud",
                         aud -> aud != null
                                 && (aud.contains(clientId) || aud.contains(appUri)))));

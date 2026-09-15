@@ -39,7 +39,10 @@ public class JwtDecoderConfig {
                 .build();
 
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(issuer),
+                JwtValidators.createDefault(),
+                new JwtClaimValidator<Object>("iss", iss -> iss != null
+                        && (iss.equals(issuer)
+                                || iss.equals("https://sts.windows.net/" + tenantId + "/"))),
                 new JwtClaimValidator<List<?>>("aud",
                         aud -> aud != null
                                 && (aud.contains(clientId) || aud.contains(appUri)))));

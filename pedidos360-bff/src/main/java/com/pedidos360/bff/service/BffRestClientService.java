@@ -24,16 +24,18 @@ public class BffRestClientService {
     }
 
     public ResponseEntity<String> forward(String path, HttpMethod method, String bearer, String body) {
-        return restClient.method(method)
+        RestClient.RequestBodySpec spec = restClient.method(method)
                 .uri(path)
-                .header(HttpHeaders.AUTHORIZATION, bearer)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(body)
-                .exchange((request, response) -> {
+                .header(HttpHeaders.AUTHORIZATION, bearer);
+        if (body != null) {
+            spec = spec.contentType(MediaType.APPLICATION_JSON).body(body);
+        }
+        return spec.exchange((request, response) -> {
                     byte[] payload = response.getBody().readAllBytes();
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.APPLICATION_JSON);
                     return ResponseEntity.status(response.getStatusCode())
-                            .headers(response.getHeaders())
-                            .contentLength(payload.length)
+                            .headers(headers)
                             .body(new String(payload, StandardCharsets.UTF_8));
                 });
     }

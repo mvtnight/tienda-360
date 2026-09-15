@@ -5,7 +5,9 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -43,5 +45,18 @@ public class BffController {
     public ResponseEntity<String> crear(@RequestHeader(HttpHeaders.AUTHORIZATION) String bearer,
             @Valid @RequestBody String body) {
         return proxy.forward("/api/pedidos", HttpMethod.POST, bearer, body);
+    }
+
+    @PatchMapping("/pedidos/{id}/estado")
+    public ResponseEntity<String> cambiarEstado(@PathVariable Long id,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String bearer,
+            @RequestBody String body) {
+        return proxy.forward("/api/pedidos/" + id + "/estado", HttpMethod.PATCH, bearer, body);
+    }
+
+    @DeleteMapping("/pedidos/{id}")
+    public ResponseEntity<String> cancelar(@PathVariable Long id,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String bearer) {
+        return proxy.forward("/api/pedidos/" + id, HttpMethod.DELETE, bearer, null);
     }
 }
