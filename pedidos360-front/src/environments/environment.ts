@@ -19,6 +19,13 @@ export const environment = {
   // Scope del access_token que el BFF/API Manager validan
   apiScope: 'api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user',
 
-  // Backend for Frontend (local o endpoint del API Gateway en AWS)
-  bffUrl: 'http://localhost:8085'
+  // Backend for Frontend (local) — http://localhost:8085 usa el BFF de la máquina
+  bffUrl: 'http://localhost:8085',
+
+  // API Manager en AWS: el build público (environment.prod.ts) activa apiGateway
+  // y llama directo a /api/pedidos con el token PKCE del navegador.
+  apiGateway: {
+    enabled: false,
+    baseUrl: ''
+  }
 };

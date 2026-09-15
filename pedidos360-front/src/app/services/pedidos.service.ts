@@ -27,15 +27,20 @@ export interface CreatePedidoRequest {
 export class PedidosService {
   constructor(private readonly http: HttpClient) {}
 
+  // Local: SPA -> BFF (/bff/pedidos). Público: SPA -> API Manager (/api/pedidos)
+  private readonly apiBase = environment.apiGateway.enabled
+    ? environment.apiGateway.baseUrl
+    : `${environment.bffUrl}/bff`;
+
   list(): Observable<Pedido[]> {
-    return this.http.get<Pedido[]>(`${environment.bffUrl}/bff/pedidos`);
+    return this.http.get<Pedido[]>(`${this.apiBase}/pedidos`);
   }
 
   get(id: number): Observable<Pedido> {
-    return this.http.get<Pedido>(`${environment.bffUrl}/bff/pedidos/${id}`);
+    return this.http.get<Pedido>(`${this.apiBase}/pedidos/${id}`);
   }
 
   create(body: CreatePedidoRequest): Observable<Pedido> {
-    return this.http.post<Pedido>(`${environment.bffUrl}/bff/pedidos`, body);
+    return this.http.post<Pedido>(`${this.apiBase}/pedidos`, body);
   }
 }

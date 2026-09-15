@@ -26,8 +26,13 @@ export const msalInstance = new PublicClientApplication(msalConfig);
  * HTTP cuyo origen coincide con el BFF (mismo matcher que el API Manager).
  */
 export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
+  // El interceptor agrega el access_token a las llamadas cuyo origen coincide
+  // con la API: local -> BFF, público -> API Manager (/api).
+  const apiBase = environment.apiGateway.enabled
+    ? environment.apiGateway.baseUrl
+    : environment.bffUrl;
   const protectedResourceMap = new Map<string, Array<string>>([
-    [environment.bffUrl, [environment.apiScope]]
+    [apiBase, [environment.apiScope]]
   ]);
   return { interactionType: InteractionType.Redirect, protectedResourceMap };
 }
