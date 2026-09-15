@@ -1,0 +1,21 @@
+# ============================================================
+# pedidos360-bff - Backend for Frontend (resource server)
+# Requiere env vars de Azure AD (idénticas en BFF y API Gateway):
+#   AZURE_TENANT_ID             -> Directory (tenant) ID
+#   AZURE_EXPOSED_APP_CLIENT_ID -> Client ID de la app de API "pedidos-api"
+#   AZURE_EXPOSED_APP_URI       -> App ID URI: api://<client-id>
+# ============================================================
+spring.application.name=pedidos360-bff
+server.port=8085
+
+azure.tenant-id=${AZURE_TENANT_ID:00000000-0000-0000-0000-000000000000}
+app.exposed-client-id=${AZURE_EXPOSED_APP_CLIENT_ID:00000000-0000-0000-0000-000000000000}
+app.exposed-app-uri=${AZURE_EXPOSED_APP_URI:api://00000000-0000-0000-0000-000000000000}
+
+# URL del API Manager/API Gateway que expone el backend de pedidos
+#   Local : http://localhost:8090
+#   AWS   : https://xxxxx.execute-api.us-east-1.amazonaws.com/prod
+bff.api-url=${PEDIDOS_API_URL:http://localhost:8090}
+
+# CORS: origen del SPA de desarrollo
+app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS:http://localhost:4200}
