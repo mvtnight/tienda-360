@@ -1,0 +1,32 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #f4f7fa;
+  color: #222;
+}
+
+h1,
+h2,
+h3 {
+  color: #0d2b45;
+}
+
+a {
+  color: #0e7fb8;
+}
+
+.hero {
+  padding: 48px 0;
+  max-width: 640px;
+}
+
+.hero .btn,
+.hero .btn.primary {
+  display: inline-block;
+  text-decoration: none;
+  margin-top: 8px;
+}

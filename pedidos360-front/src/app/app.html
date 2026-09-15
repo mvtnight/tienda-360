@@ -1,0 +1,23 @@
+<header class="navbar">
+  <a class="brand" routerLink="/">Pedidos<span>360</span></a>
+  <nav>
+    <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+    <a routerLink="/pedidos" routerLinkActive="active">Pedidos</a>
+  </nav>
+  <div class="user">
+    @if (authState.authenticated()) {
+      <span class="user-name">{{ userName }}</span>
+      <span class="badges">
+        @for (role of authState.roles(); track $index) {
+          <span class="badge">{{ role }}</span>
+        }
+      </span>
+      <button class="btn" (click)="logout()">Salir</button>
+    } @else {
+      <button class="btn primary" (click)="login()">Ingresar</button>
+    }
+  </div>
+</header>
+<main>
+  <router-outlet />
+</main>
