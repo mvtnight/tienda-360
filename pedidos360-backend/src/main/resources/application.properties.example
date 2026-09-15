@@ -1,0 +1,25 @@
+# ============================================================
+# pedidos360-backend - BFF / API Manager interno (resource server)
+# Requiere env vars de Azure AD (idénticas en BFF y API Gateway):
+#   AZURE_TENANT_ID             -> Directory (tenant) ID
+#   AZURE_EXPOSED_APP_CLIENT_ID -> Client ID de la app de API "pedidos-api"
+#   AZURE_EXPOSED_APP_URI       -> App ID URI: api://<client-id>
+# Con los placeholders 0000... el servicio arranca pero todo token se rechaza.
+# ============================================================
+spring.application.name=pedidos360-backend
+server.port=8090
+
+azure.tenant-id=${AZURE_TENANT_ID:00000000-0000-0000-0000-000000000000}
+app.exposed-client-id=${AZURE_EXPOSED_APP_CLIENT_ID:00000000-0000-0000-0000-000000000000}
+app.exposed-app-uri=${AZURE_EXPOSED_APP_URI:api://00000000-0000-0000-0000-000000000000}
+
+# Datasource (H2 en memoria; en un entorno real usar PostgreSQL/MySQL via env)
+spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:h2:mem:pedidos360;DB_CLOSE_DELAY=-1}
+spring.datasource.driver-class-name=${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+
+# CORS: origen del SPA desplegado (p.ej. CloudFront S3 o https://spa.pedidos360.com)
+app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS:http://localhost:4200}
