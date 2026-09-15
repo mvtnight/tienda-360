@@ -1,0 +1,286 @@
+================================================================================
+ PEDIDOS360 - ETAPA 1: GUIA DE DEFENSA (todo lo que debes saber y poder mostrar)
+ Curso DSY1107  -  Entregas EP1 (encargo) y EP2 (presentacion)
+================================================================================
+
+--------------------------------------------------------------------------------
+0. RESUMEN DE 30 SEGUNDOS (discurso de apertura)
+--------------------------------------------------------------------------------
+"Pedidos360 es un sistema de gestion de pedidos. En la etapa 1 implementamos la
+seguridad de punta a punta con Azure AD (Entra ID) como proveedor de identidad
+(IDaaS):
+
+  SPA Angular + MSAL (login con Authorization Code + PKCE)
+  -> BFF Spring Boot :8085 que valida el JWT con las claves publicas de Azure
+  -> API Manager en AWS (Amazon API Gateway) que vuelve a validar el JWT
+  -> Backend Spring Boot :8090 en EC2 (ALB + Auto Scaling) con autorizacion por
+     roles (PEDIDOS_ADMIN / PEDIDOS_VENDEDOR).
+
+El mismo token circula validado tres veces (BFF, API Manager y backend), y las
+reglas de rol dan 200, 401 y 403 segun quien haga cada operacion. Tenemos el
+flujo funcionando localmente y desplegado en AWS."
+
+--------------------------------------------------------------------------------
+1. ARQUITECTURA - FLUJO COMPLETO
+--------------------------------------------------------------------------------
+1) El usuario abre la SPA (http://localhost:4200) y hace login con Azure AD.
+   La SPA usa MSAL v5 con "Authorization Code + PKCE" (no hay secretos, es un
+   public client). Redirect URI: http://localhost:4200.
+2) MSAL devuelve un access_token cuyo 'aud' es api://6da3f8f4-905c-4c76-abf0-c711d0dd3926
+   y cuyo scope es api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user.
+3) El interceptor HTTP de la SPA agrega el header  Authorization: Bearer <token>.
+4) El BFF (:8085) recibe /bff/pedidos y VALIDA el token ANTES de reenviar:
+   - descarga las claves publicas JWKS desde la URL de discovery de Azure,
+   - valida la firma RS256, el emisor (iss), la audiencia (aud) y exp/nbf.
+   Si algo falla devuelve 401 sin llegar al backend. (JwtDecoderConfig.java)
+5) Si el token es valido, el BFF reenvia LA MISMA cabecera Authorization hacia
+   el API Manager (PEDIDOS_API_URL).
+6) El API Manager (API Gateway HTTP API, stack pedidos360-httpapi) tiene un
+   JWT authorizer en TODAS las rutas con los MISMOS criterios (issuer del
+   tenant y audience api://<client-id>), por lo que un token invalido recibe
+   401 y un token valido sin el scope access_as_user recibe 403.
+7) El API Manager proxya a un ALB (stack pedidos360-alb) que balancea hacia
+   una instancia EC2 (Auto Scaling) donde corre el backend Spring Boot :8090.
+   El backend tambien valida el JWT y aplica RBAC por @PreAuthorize.
+
+En el backend hay dos controles de rol importantes:
+  - creacion de pedido: PEDIDOS_ADMIN o PEDIDOS_VENDEDOR
+  - cambio de estado / cancelacion: solo PEDIDOS_ADMIN
+Por eso el mismo endpoint responde distinto segun quien llame: 200, 201, 401, 403.
+
+--------------------------------------------------------------------------------
+2. COMPONENTES Y TECNOLOGIAS
+--------------------------------------------------------------------------------
+- pedidos360-front   : Angular 20 + @azure/msal-angular v5 (standalone).
+  - Guards de ruta (auth.guard) redirigen al login si no hay sesion.
+  - Interceptor agrega Authorization: Bearer (autorizado para el scope de la API).
+  - Dashboard muestra claims del id_token/access_token y roles; boton
+    "Copiar access_token (PKCE)" para obtener el token real del navegador.
+  - Pedidos lista pedidos y permite crear si el rol lo permite.
+- pedidos360-bff      : Spring Boot 3.5 (Java 21 local, JDK 22). Puerto 8085.
+  - JwtDecoderConfig: JWKS (RS256) + iss (login.microsoftonline.com/.../v2.0 y
+    sts.windows.net/tenant) + aud (client id o uri de la API) + exp/nbf.
+  - BffController: /bff/pedidos (GET), /bff/pedidos/{id} (GET), POST, PATCH
+    /bff/pedidos/{id}/estado y DELETE /bff/pedidos/{id}.
+  - BffRestClientService: reenvia el mismo Bearer con RestClient.
+- pedidos360-backend : Spring Boot 3.5 con Spring Security OAuth2 Resource Server.
+  Puerto 8090. Rutas /api/pedidos..., /health (publico). RBAC con @PreAuthorize.
+  - SecurityConfig convierte el claim 'roles' a autoridades ROLE_PEDIDOS_* en
+    mayusculas (normaliza el valor que viene en minusculas de Azure).
+- infra/              : CloudFormation + deploy.ps1 + user-data (EC2).
+
+--------------------------------------------------------------------------------
+3. AZURE AD (ENTRA ID) - DATOS QUE DEBES MANEJAR DE MEMORIA
+--------------------------------------------------------------------------------
+TenantId        : 0b4bca41-b3f5-427c-aeac-2dbcd055f91d
+Dominio         : matiaspulgar.onmicrosoft.com
+ClientId SPA    : 54b906c8-47fb-4066-a49a-b3aa7f05427e   (public client, PKCE)
+ClientId API    : 6da3f8f4-905c-4c76-abf0-c711d0dd3926   (expone access_as_user)
+Scope           : api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user
+App ID URI      : api://6da3f8f4-905c-4c76-abf0-c711d0dd3926
+
+Dos aplicaciones:
+  A) "SPA" (54b906c8...): registro de tipo SPA; redirect http://localhost:4200;
+     "Allow public client flows" = Si (permite ROPC para pruebas automatizadas).
+  B) "pedidos-api" (6da3f8f4...): expone el scope access_as_user; app roles
+     PEDIDOS_ADMIN y PEDIDOS_VENDEDOR asignados a jose y maria.
+
+Usuarios de prueba (contrasena entregada en clase, solo para demo):
+  - maria@matiaspulgar.onmicrosoft.com  -> rol PEDIDOS_VENDEDOR
+  - jose@matiaspulgar.onmicrosoft.com   -> rol PEDIDOS_ADMIN
+
+Claims importantes en el access_token:
+  - aud  : api://6da3f8f4-...  (el que validan BFF y API Manager)
+  - iss  : https://login.microsoftonline.com/<tenant>/v2.0 (navegador/PKCE)
+           o https://sts.windows.net/<tenant>/ (ROPC)
+  - roles: ["pedidos_vendedor"] o ["pedidos_admin"] (en minusculas, se normalizan)
+  - exp/nbf : validez.
+
+--------------------------------------------------------------------------
+4. COMO SACAR UN TOKEN DE PRUEBA (ROPC) DESDE LAS CONSOLAS
+--------------------------------------------------------------------------
+(Usa un token del navegador con el boton "Copiar access_token" para el API Manager.
+ Para pruebas locales el ROPC tambien sirve; el API Manager NO acepta ROPC por
+ que su issuer es sts.windows.net. Ver punto 6.)
+
+Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/oauth2/v2.0/token" `
+  -ContentType "application/x-www-form-urlencoded" -Body @{
+    client_id="54b906c8-47fb-4066-a49a-b3aa7f05427e"
+    grant_type="password"
+    username="maria@matiaspulgar.onmicrosoft.com"
+    password="<clave>"
+    scope="api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user"
+  }
+
+--------------------------------------------------------------------------
+5. SEGURIDAD: QUE VALIDA CADA CAPA (para defender)
+--------------------------------------------------------------------------
+BFF (JwtDecoderConfig):
+  - Obtiene JWKS desde https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys
+  - Firma RS256; iss permite login.microsoftonline.com/<tenant>/v2.0 y
+    sts.windows.net/<tenant>/ ; aud igual al client-id o a la App ID URI;
+    con exp/nbf obligatorios. Falla -> 401 con JSON de error.
+API Manager (AWS):
+  - JWT authorizer del API Gateway con IdentitySource = header Authorization.
+  - JwtConfiguration.audience = api://<client-id> ; issuer =
+    https://login.microsoftonline.com/<tenant>/v2.0
+  - AuthorizationScopes = access_as_user en todas las rutas (token valido pero
+    sin scope -> 403).
+  - Todas las rutas del API Gateway estan protegidas, incluida /health.
+Backend:
+  - OAuth2 Resource Server + @PreAuthorize. Roles normalizados en mayusculas.
+    - /health permitAll (para el health check del ALB).
+    - PATCH/DELETE solo ADMIN -> maria recibe 403.
+  - CORS: solo http://localhost:4200.
+
+--------------------------------------------------------------------------
+6. POR QUE EL API GATEWAY REQUIERE TOKEN DEL NAVEGADOR (IMPORTANTE)
+--------------------------------------------------------------------------
+El JWT authorizer de AWS valida el issuer EXACTO que configuramos (login.microsoftonline
+.com/v2.0), el mismo que emiten los tokens del flujo del navegador (Authorization
+Code + PKCE). Los tokens ROPC/device-code pueden venir con issuer sts.windows.net,
+por lo que el API Gateway los rechaza con 401. Por eso la evidencia del API Manager
+se hace con el token copiado desde la SPA (boton "Copiar access_token"), que es
+exactamente el token real del flujo del navegador.
+
+--------------------------------------------------------------------------------
+7. AWS - DESPLIEGUE REAL (lo que esta vivo ahora mismo)
+--------------------------------------------------------------------------------
+Region         : us-east-2
+Cuenta         : 637423629193
+Bucket         : pedidos360-matiaspulgar  (contiene pedidos360-backend.jar, 57,7 MB)
+Stack ALB/EC2  : pedidos360-alb
+   ALB DNS     : pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com
+   EC2         : i-068c9d685225f19f3 (running), IP publica 18.191.85.206
+                 instala Java 21 Corretto, baja el jar de S3, systemd pedidos360-backend.
+Stack API GW   : pedidos360-httpapi
+   ApiEndpoint : https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod
+VPC/Subnets    : vpc-0244fc236a6eb21dc (172.31.0.0/16) con
+                 subnet-03251d8d1fa4a3af2 (us-east-2a) y
+                 subnet-09cceb5a59068a67f (us-east-2b)
+Key pair       : pedidos360-key
+
+NOTA: los subnets 10.0.x que se tenian en un inicio NO pertenecen a esta VPC,
+por eso se usaron los subnets 172.31.x de la VPC default.
+
+Rutas que expone el API Manager (todas con JWT+scope):
+  GET    /api/pedidos
+  GET    /api/pedidos/{id}
+  POST   /api/pedidos
+  PATCH  /api/pedidos/{id}/estado
+  DELETE /api/pedidos/{id}
+  GET    /health
+CORS del API Manager: AllowOrigins http://localhost:4200; AllowMethods GET, POST,
+PATCH, DELETE, OPTIONS; AllowHeaders *; ExposeHeaders Authorization.
+
+Health-check del EC2 (sin token, directo al ALB, NO es ruta del API Gateway):
+  curl http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com/health
+  -> 200 {"status":"OK"}
+
+Redesplegar todo:
+  powershell -ExecutionPolicy Bypass -File infra\scripts\deploy.ps1
+
+-----------------------------------------------------------------------------
+8. RUBRICA EP1 (ENCARGO) - QUE DEMOSTRAR
+-----------------------------------------------------------------------------
+EP1 = 60% SPA Angular + MSAL  y  40% BFF valida token igual que el API Manager.
+  1. Login MSAL en la SPA con Azure AD (Authorization Code + PKCE). [CAPTURA]
+  2. Logout / cierre de sesion. [CAPTURA]
+  3. Guards: entrar a /pedidos sin sesion redirige al login. [CAPTURA]
+  4. Interceptor HTTP agregando Authorization: Bearer. [CAPTURA o codigo]
+  5. Dashboard con claims (nombre, email, oid) y roles del access_token. [CAPTURA]
+  6. Boton "Copiar access_token (PKCE)". [CAPTURA]
+  7. BFF: /bff/pedidos sin token -> 401; con token valido -> 200. [CAPTURA]
+  8. BFF: mostrar que valida firma JWKS + iss + aud + exp (JwtDecoderConfig). [codigo]
+  9. Explicar que el API Manager valida con los MISMOS criterios.
+
+-----------------------------------------------------------------------------
+9. RUBRICA EP2 (PRESENTACION, 8 INDICADORES) - QUE DEMOSTRAR
+-----------------------------------------------------------------------------
+ 1) Rutas del API Manager (13%): mostrar en la consola AWS (o CloudFormation)
+    las rutas GET/POST/PATCH/DELETE /api/pedidos... y /health con el authorizer
+    JWT adjunto. [CAPTURA consola]
+ 2) CORS (7%): mostrar CorsConfiguration del API Manager permitiendo
+    http://localhost:4200 y OPTIONS. [CAPTURA]
+ 3) Tenant (10%): mostrar en Azure AD el tenant/tent:id y dominio. [CAPTURA portal]
+ 4) App en el tenant (10%): mostrar las app registrations SPA y pedidos-api con
+    sus client ids. [CAPTURA]
+ 5) Flujo registro + login (10%) y 6) Authorization Code + PKCE (15%): en
+    Acceso, la app SPA con redirect y "Allow public client flows"; login en vivo
+    en :4200. [CAPTURA]
+ 7) JWT en todas las rutas con 200/401/403 (20%): curls contra el ApiEndpoint:
+      - sin token            -> 401
+      - token valido maria   -> 200/201 y PATCH/DELETE -> 403
+      - token valido jose    -> PATCH 200, DELETE 204, POST 201
+    Con el token del navegador (boton copiar). [CAPTURA de cada uno]
+ 8) Evidencia de cada ruta -> backend -> JSON (15%): mostrar que el cuerpo
+    llega desde el backend EC2 (JSON de pedidos) y que la instancia EC2 responde
+    (health check), idealmente con GET/POST devolviendo el JSON real. [CAPTURA]
+
+--- Comandos de demo (PowerShell), con $T = token copiado del navegador ---
+$api = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod"
+# 401 sin token
+Invoke-WebRequest "$api/api/pedidos" -UseBasicParsing
+# 200 maria (GET)
+Invoke-WebRequest "$api/api/pedidos" -Headers @{Authorization="Bearer $T"} -UseBasicParsing
+# 403 maria (PATCH estado)
+Invoke-WebRequest "$api/api/pedidos/1/estado" -Method PATCH -Headers @{Authorization="Bearer $T"} -ContentType "application/json" -Body '{"estado":"ENVIADO"}' -UseBasicParsing
+# 201 jose (POST) y 200/204 (PATCH/DELETE) usando el token de jose
+# Health por ALB (probar que el backend responde en EC2)
+Invoke-WebRequest "http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com/health" -UseBasicParsing
+
+------------------------------------------------------------------------------
+10. PLAN B (ANTI-FALLO < 3 MIN)
+------------------------------------------------------------------------------
+Si en la presentacion se cae algo:
+ 1) Backend/BFF/SPA locales ya estan levantados. BFF por defecto apunta a
+    http://localhost:8090 (backed local). Reiniciar cualquier servicio:
+      powershell -ExecutionPolicy Bypass -File infra\scripts\restart-services.ps1
+ 2) Si cae AWS pero funciona local: no tocar nada, la app sigue funcionando
+    con el BFF local. Explicar: "la arquitectura AWS ya quedo demostrada con
+    las capturas; aca muestro el mismo flujo con el backend local".
+ 3) Renovar tokens de prueba: infra\scripts\renovar-tokens.ps1 (guarda en
+    %LOCALAPPDATA%\Temp\opencode\maria.token y jose.token).
+ 4) Si el API Gateway no respondiera, mostrar las capturas ya tomadas y el
+    health check del ALB.
+ 5) Guardar capturas en docs\presentacion-EP2.md (marcadas [CAPTURA]) y tener
+    el repo pusheado a GitHub para la entrega por AVA.
+
+------------------------------------------------------------------------------
+11. PREGUNTAS FRECUENTES DEL PROFE (con respuesta)
+------------------------------------------------------------------------------
+Q: Por que el BFF valida de nuevo el token si ya lo valido la SPA?
+R: Porque la SPA es un public client: cualquiera puede llamar al BFF con un
+   token de otro. El BFF y el API Manager son la frontera de confianza; validan
+   firma/iss/aud/exp antes de reenviar.
+
+Q: Que pasa si el token expiró?
+R: El decoder valida exp; MSAL renueva en silencio (acquireTokenSilent) y si no
+   puede, redirige al login. El API Manager responde 401 y el backend tambien.
+
+Q: Por que roles en mayusculas?
+R: Azure envia el claim 'roles' en minusculas (pedidos_vendedor). El backend los
+   normaliza a ROLE_PEDIDOS_VENDEDOR para @PreAuthorize. Es una normalizacion
+   determinista, no se cambia nada en el tenant.
+
+Q: El token pasó por BFF y por API Manager; por que validar una tercera vez en
+   el backend?
+R: Defensa en profundidad. El backend es quien controla los datos, nunca debe
+   confiar ciegamente en el header; aplica sus propias reglas RBAC.
+
+Q: Donde queda la contrasena de los usuarios?
+R: Son cuentas educativas del tenant del curso; el password sale por ROPC solo
+   para pruebas automatizadas (SSO interactivo no lo pide).
+
+Q: Por que no usar el token ROPC en el API Manager?
+R: Los tokens con issuer sts.windows.net (mayoria de ROPC) no coinciden con el
+   issuer configurado en el JWT authorizer (login.microsoftonline.com/v2.0). El
+   del navegador (PKCE) si. Es una decision de consistencia con el flujo real.
+
+------------------------------------------------------------------------------
+12. EVIDENCIAS PENDIENTES (check-list)
+------------------------------------------------------------------------------
+[ ] Capturas EP1: login, logout, guard, interceptor, claims/roles, copiar token
+[ ] Capturas EP2: rutas consola AWS, CORS, tenant, apps, PKCE, curls 200/401/403
+[ ] Pegar cada captura en docs\presentacion-EP2.md
+[ ] Commit + push del repo y entregar links en AVA

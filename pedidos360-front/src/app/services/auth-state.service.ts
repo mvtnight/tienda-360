@@ -56,4 +56,20 @@ export class AuthStateService {
   hasRole(role: string): boolean {
     return this.userRoles().includes(role);
   }
+
+  /**
+   * Obtiene en silencio el access_token de la API (PKCE / Authorization Code).
+   * Útil para evidencia: copiar el token y usarlo en curls contra el API Manager.
+   */
+  async getAccessToken(): Promise<string> {
+    const account = this.msal.instance.getAllAccounts()[0];
+    if (!account) {
+      throw new Error('No hay sesión iniciada');
+    }
+    const response = await this.msal.instance.acquireTokenSilent({
+      account,
+      scopes: [environment.apiScope]
+    });
+    return response.accessToken;
+  }
 }
