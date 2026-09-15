@@ -45,6 +45,22 @@ que valida el mismo token con los mismos criterios que el BFF.
 - Región `us-east-2`, cuenta `637423629193`; bucket `pedidos360-matiaspulgar` (jar: `pedidos360-backend.jar`).
 - El API Manager valida JWT en **todas** las rutas (GET/POST/PATCH/DELETE `/api/pedidos…` y `/health`), con CORS para `http://localhost:4200`.
 
+## Web pública (CloudFront + S3)
+
+La SPA también está publicada en internet (build `ng build` con `environment.prod.ts`):
+
+- **URL:** https://d2u1dalj9nm2b1.cloudfront.net (CloudFront `E2G724OS67RE8F`)
+- Origen: `s3://pedidos360-matiaspulgar/web/` (vía OAI `E2Z0KEJW8C69D6`, bucket privado)
+- El build público llama **directo al API Manager** (`/api/pedidos`) con el token PKCE;
+  el interceptor de MSAL adjunta el Bearer al origen `…execute-api…`. Deep links
+  (`/dashboard`) sirven `index.html` (error 403/404 → 200).
+- **Login:** la app registration SPA en Azure debe tener la Redirect URI
+  `https://d2u1dalj9nm2b1.cloudfront.net` (Authentication → Single-page application).
+- CORS: API Gateway y backend EC2 aceptan `http://localhost:4200` **y** la URL pública.
+- Para re-publicar: `cd pedidos360-front && npm.cmd run build`, luego
+  `aws s3 sync dist\pedidos360-front\browser s3://pedidos360-matiaspulgar/web/ --delete` y
+  `aws cloudfront create-invalidation --distribution-id E2G724OS67RE8F --paths "/*"`.
+
 Volver a desplegar desde cero (S3 → ALB/EC2 → API Gateway):
 
 ```powershell

@@ -131,7 +131,18 @@ Backend:
   - OAuth2 Resource Server + @PreAuthorize. Roles normalizados en mayusculas.
     - /health permitAll (para el health check del ALB).
     - PATCH/DELETE solo ADMIN -> maria recibe 403.
-  - CORS: solo http://localhost:4200.
+  - CORS: http://localhost:4200 y https://d2u1dalj9nm2b1.cloudfront.net.
+
+WEB PUBLICA (CloudFront):
+  - URL: https://d2u1dalj9nm2b1.cloudfront.net (SPA produccion en S3 /web via OAI).
+  - El build produce con environment.prod.ts llama DIRECTO al API Manager
+    (/api/pedidos) con el access_token PKCE del navegador (TODA la cadena en AWS:
+    Navegador -> CloudFront -> API Manager -> ALB -> EC2).
+  - Login requiere Redirect URI https://d2u1dalj9nm2b1.cloudfront.net agregada en
+    la app SPA de Azure (Authentication -> Single-page application).
+  - Republish: npm.cmd run build; aws s3 sync dist\pedidos360-front\browser
+    s3://pedidos360-matiaspulgar/web/ --delete; aws cloudfront create-invalidation
+    --distribution-id E2G724OS67RE8F --paths "/*".
 
 --------------------------------------------------------------------------
 6. POR QUE EL API GATEWAY REQUIERE TOKEN DEL NAVEGADOR (IMPORTANTE)
