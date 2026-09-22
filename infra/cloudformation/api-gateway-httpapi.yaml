@@ -21,7 +21,7 @@ Parameters:
   SpaOrigin:
     Type: String
     Default: http://localhost:4200
-    Description: Origen(es) de la SPA habilitados por CORS en el API Manager (separar varios con coma). Ej: http://localhost:4200,https://xxxx.cloudfront.net
+    Description: "Origen(es) de la SPA habilitados por CORS en el API Manager (separar varios con coma). Ej: http://localhost:4200,https://xxxx.cloudfront.net"
 
 Resources:
   Api:
@@ -40,7 +40,8 @@ Resources:
           - DELETE
           - OPTIONS
         AllowHeaders:
-          - '*'
+          - Authorization
+          - Content-Type
         ExposeHeaders:
           - Authorization
         MaxAge: 3600

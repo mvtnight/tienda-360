@@ -34,7 +34,10 @@ export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
   const protectedResourceMap = new Map<string, Array<string>>([
     [apiBase, [environment.apiScope]]
   ]);
-  return { interactionType: InteractionType.Redirect, protectedResourceMap };
+  // strictMatching:false = matching por prefijo (la clave .../prod/api cubre
+  // .../prod/api/pedidos). Con strictMatching (default en msal-angular v5) la
+  // URL se ancla completa y el interceptor no adjunta el token.
+  return { interactionType: InteractionType.Redirect, protectedResourceMap, strictMatching: false };
 }
 
 export function MSALGuardConfigFactory(): MsalGuardConfiguration {

@@ -33,7 +33,7 @@ Parameters:
   SpaOrigin:
     Type: String
     Default: http://localhost:4200
-    Description: Origen de la SPA (CORS del backend)
+    Description: "Origen(es) de la SPA habilitados por CORS en el backend (separar varios con coma). Ej: http://localhost:4200,https://xxxx.cloudfront.net"
 
 Resources:
   LoadBalancerSecurityGroup:

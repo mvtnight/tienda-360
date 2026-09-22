@@ -4,22 +4,23 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 
-export type EstadoPedido = 'CREADO' | 'EN_PREPARACION' | 'ENVIADO' | 'ENTREGADO' | 'CANCELADO';
+export type EstadoPedido = 'RECIBIDO' | 'EN_PREPARACION' | 'ENVIADO' | 'ENTREGADO' | 'CANCELADO';
 
 export interface Pedido {
   id: number;
   cliente: string;
   email: string;
-  estado: EstadoPedido;
-  detalle: string;
+  items: string[];
   total: number;
-  fechaCreacion: string;
+  estado: EstadoPedido;
+  creador?: string;
+  createdAt: string;
 }
 
 export interface CreatePedidoRequest {
   cliente: string;
   email: string;
-  detalle: string;
+  items: string[];
   total: number;
 }
 
@@ -42,5 +43,13 @@ export class PedidosService {
 
   create(body: CreatePedidoRequest): Observable<Pedido> {
     return this.http.post<Pedido>(`${this.apiBase}/pedidos`, body);
+  }
+
+  actualizarEstado(id: number, estado: EstadoPedido): Observable<Pedido> {
+    return this.http.patch<Pedido>(`${this.apiBase}/pedidos/${id}/estado`, { estado });
+  }
+
+  eliminar(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiBase}/pedidos/${id}`);
   }
 }

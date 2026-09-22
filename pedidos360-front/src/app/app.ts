@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 
+import { environment } from '../environments/environment';
 import { AuthStateService } from './services/auth-state.service';
 
 @Component({
@@ -27,5 +28,9 @@ export class App {
   get userName(): string {
     const account = this.msal.instance.getAllAccounts()[0];
     return account?.name ?? account?.username ?? '';
+  }
+
+  get ambiente(): string {
+    return environment.apiGateway.enabled ? 'AWS' : 'Local';
   }
 }

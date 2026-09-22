@@ -181,8 +181,9 @@ Rutas que expone el API Manager (todas con JWT+scope):
   PATCH  /api/pedidos/{id}/estado
   DELETE /api/pedidos/{id}
   GET    /health
-CORS del API Manager: AllowOrigins http://localhost:4200; AllowMethods GET, POST,
-PATCH, DELETE, OPTIONS; AllowHeaders *; ExposeHeaders Authorization.
+CORS del API Manager: AllowOrigins http://localhost:4200 y
+https://d2u1dalj9nm2b1.cloudfront.net; AllowMethods GET, POST, PATCH, DELETE,
+OPTIONS; AllowHeaders Authorization, Content-Type; ExposeHeaders Authorization.
 
 Health-check del EC2 (sin token, directo al ALB, NO es ruta del API Gateway):
   curl http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com/health

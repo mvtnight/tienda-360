@@ -5,6 +5,7 @@
     <a routerLink="/pedidos" routerLinkActive="active">Pedidos</a>
   </nav>
   <div class="user">
+    <span class="env">Ambiente: {{ ambiente }}</span>
     @if (authState.authenticated()) {
       <span class="user-name">{{ userName }}</span>
       <span class="badges">

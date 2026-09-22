@@ -25,7 +25,8 @@ x-amazon-apigateway-cors:
     - DELETE
     - OPTIONS
   allowHeaders:
-    - '*'
+    - Authorization
+    - Content-Type
   exposeHeaders:
     - Authorization
   maxAge: 3600

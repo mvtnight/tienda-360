@@ -1,0 +1,158 @@
+================================================================================
+ PEDIDOS360 - GUIA DE ESTUDIO PARA LA DEFENSA (cheat-sheet definitiva)
+ (complementa GUIA-DEFENSA.txt, aqui esta lo minimo para aprobar y defender)
+================================================================================
+
+--------------------------------------------------------------------------------
+1. DATOS DE MEMORIA (te los van a preguntar)
+--------------------------------------------------------------------------------
+Tenant (Directory) ID  : 0b4bca41-b3f5-427c-aeac-2dbcd055f91d
+Dominio                : matiaspulgar.onmicrosoft.com
+ClientId SPA (public)  : 54b906c8-47fb-4066-a49a-b3aa7f05427e
+ClientId API           : 6da3f8f4-905c-4c76-abf0-c711d0dd3926
+App ID URI             : api://6da3f8f4-905c-4c76-abf0-c711d0dd3926
+Scope                  : api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user
+Issuer (navegador/PKCE): https://login.microsoftonline.com/<tenant>/v2.0
+Issuer (ROPC)          : https://sts.windows.net/<tenant>/
+Endpoint API Manager   : https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod
+ALB (EC2 backend)      : http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com
+Web publica (S3+CloudFront): https://d2u1dalj9nm2b1.cloudfront.net
+Puertos: backend 8090 | bff 8085 | SPA 4200 | API Manager prod
+
+USUARIOS DE PRUEBA
+  maria@matiaspulgar.onmicrosoft.com  -> rol PEDIDOS_VENDEDOR  (no admin)
+  jose@matiaspulgar.onmicrosoft.com   -> rol PEDIDOS_ADMIN     (administra)
+
+Dos APPS en el tenant:
+  A) "SPA"  (54b906c8...): tipo SPA, redirect http://localhost:4200
+     (+ https://d2u1dalj9nm2b1.cloudfront.net en produccion),
+     Allow public client flows ON. Public client, SIN secreto.
+  B) "pedidos-api" (6da3f8f4...): Expose an API -> scope access_as_user;
+     App roles PEDIDOS_ADMIN y PEDIDOS_VENDEDOR asignados a jose y maria.
+
+RUTAS DEL API MANAGER (todas con JWT+scope access_as_user):
+  GET    /health                         -> backend /health
+  GET    /api/pedidos                    -> backend listar
+  GET    /api/pedidos/{id}               -> backend detalle
+  POST   /api/pedidos                    -> backend crear
+  PATCH  /api/pedidos/{id}/estado        -> backend cambiar estado
+  DELETE /api/pedidos/{id}               -> backend eliminar
+  ANY    /{proxy+}                       -> catch-all protegido (nada queda libre)
+
+--------------------------------------------------------------------------------
+2. FLUJO (dilo en 3 frases)
+--------------------------------------------------------------------------------
+1) El usuario abre la SPA y hace login con Azure AD: MSAL v5 usa Authorization
+   Code + PKCE (code_verifier + code_challenge S256, state y nonce). No hay
+   secretos, es un public client: solo redirectUri + clientId.
+2) MSAL canjea el code en el backend de Azure y devuelve un access_token cuyo
+   aud es api://6da3f8f4... y scope access_as_user. El interceptor adjunta
+   Authorization: Bearer <token> a las llamadas al BFF (local) o al API Manager.
+3) El API Manager (API Gateway) valida el JWT en TODAS las rutas: firma JWKS,
+   issuer = login.microsoftonline.com/<tenant>/v2.0, audience = api://<client-id>,
+   y exige scope access_as_user. Sin token -> 401, token sin scope -> 403.
+4) Si es valido, proxya al ALB -> EC2 backend (:8090). El backend RE-valida y
+   aplica RBAC: cualquier autenticado lee; ADMIN o VENDEDOR crea; solo ADMIN
+   cambia estado o elimina. Mismo JSON circula validado 3 veces (BFF, API GW,
+   backend) = defense in depth.
+
+MATRIZ 200/401/403 (aprenderla):
+  sin token                 -> 401 (autorizador JWT)
+  token invalido            -> 401 (firma JWKS no verifica)
+  token valido sin scope    -> 403 (authorizer scopes)
+  GET/POST maria o jose     -> 200/201
+  PATCH/DELETE maria        -> 403 (RBAC: rol vendedor)
+  PATCH/DELETE jose         -> 200 / 204 (RBAC: rol admin)
+
+--------------------------------------------------------------------------------
+3. QUE VALIDA CADA CAPA (pregunta casi segura del profe)
+--------------------------------------------------------------------------------
+- BFF (JwtDecoderConfig): descarga JWKS de discovery/v2.0/keys, firma RS256,
+  iss (login.microsoftonline.com/<t>/v2.0 o sts.windows.net/<t>/), aud
+  (clientId o app URI), exp/nbf. Falla -> 401.
+- API Manager (API Gateway): authorizer JWT con issuer Y audience; por eso es
+  "el mismo criterio que el BFF". IdentitySource = header Authorization.
+  AuthorizationScopes = access_as_user -> token sin scope = 403.
+- Backend: OAuth2 Resource Server + @PreAuthorize. Normaliza claim 'roles'
+  (minusculas de Azure) a ROLE_PEDIDOS_* en mayusculas para el RBAC.
+  /health es permitAll (lo usa el health-check del ALB).
+
+CLAVE PARA DEFENDER: "¿Por que validar el token 3 veces?" -> porque son 3
+superficies de confianza distintas; ningun componente confia en el otro.
+
+--------------------------------------------------------------------------------
+4. PREGUNTAS PROBABLES + RESPUESTA CORTA
+--------------------------------------------------------------------------------
+Q: ¿Por que Authorization Code + PKCE y no Implicit?
+R: Implicit expone el token en la URL y no se recomienda; PKCE envía solo un
+   code_challenge S256 y canjea el code por el token sin secretos, ideal para
+   SPAs (public client). El access_token nunca aparece en la URL.
+
+Q: ¿Que valida state y nonce?
+R: state -> anti-CSRF (lo genera la app y Azure lo devuelve igual); nonce ->
+   anti-replay en el id_token. MSAL los maneja automáticamente.
+
+Q: ¿Como se genera el code_challenge?
+R: code_verifier aleatorio -> SHA-256 -> base64url -> code_challenge, con
+   método S256. MSAL lo hace internamente.
+
+Q: ¿ROPC por que no sirve para el API Manager?
+R: Porque su issuer es sts.windows.net y el authorizer exige el issuer exacto
+   login.microsoftonline.com/<tenant>/v2.0 (el del navegador). Es una
+   consistencia con el flujo real.
+
+Q: ¿Donde se guardan los passwords?
+R: En el tenant de Azure AD; el usuario nunca entrega la clave a la app ni al
+   BFF, solo a Microsoft (SSO). La SPA no conoce passwords.
+
+Q: ¿Que pasa si el token expiro?
+R: MSAL lo renueva en silencio (acquireTokenSilent) o redirige al login;
+   mientras tanto el API Manager y el backend responden 401.
+
+Q: ¿Por que roles en mayusculas en el backend?
+R: Azure manda 'roles' en minusculas (pedidos_admin / pedidos_vendedor); el
+   backend los normaliza a ROLE_PEDIDOS_* para @PreAuthorize. No se cambia
+   nada en el tenant.
+
+--------------------------------------------------------------------------------
+5. DEMO LIVE (orden en que mostrarlo, < 8 min)
+--------------------------------------------------------------------------------
+1) Abrir http://localhost:4200 -> login con maria -> Dashboard muestra claims
+   y rol -> boton "Copiar access_token (PKCE)". (indicadores 5 y 6)
+2) DevTools pestaña Red: capturar el /authorize?response_type=code&code_challenge=
+   ...&code_challenge_method=S256&state=...&nonce=...  (indicador 6)
+3) Consola AWS API Gateway: Routes con authorizer JWT en cada ruta +
+   CORS. (indicadores 1 y 2)
+4) Portal Azure: Tenant overview, Users (maria/jose), App registrations (SPA y
+   pedidos-api), Expose an API -> access_as_user, App roles. (indicadores 3 y 4)
+5) Ejecutar:  powershell -File infra\scripts\evidencias-api-manager.ps1 -Token $T
+   (genera TODO el 200/401/403 + JSON). (indicadores 7 y 8)
+6) Cerrar: mismo token validado en 3 capas = defense in depth.
+
+--------------------------------------------------------------------------------
+6. COMANDOS RAPIDOS DE EVIDENCIA (si no tienes el script a mano)
+--------------------------------------------------------------------------------
+$api = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod"
+# 401 sin token
+Invoke-WebRequest "$api/api/pedidos" -UseBasicParsing
+# 200 maria (GET)
+Invoke-WebRequest "$api/api/pedidos" -Headers @{Authorization="Bearer $T"} -UseBasicParsing
+# 403 maria (PATCH estado -> necesita rol admin)
+Invoke-WebRequest "$api/api/pedidos/1/estado" -Method PATCH -Headers @{Authorization="Bearer $T"} -ContentType "application/json" -Body '{"estado":"ENVIADO"}' -UseBasicParsing
+# 201 jose (POST), 200 (PATCH), 204 (DELETE) con el token de jose
+# Preflight CORS
+Invoke-WebRequest "$api/api/pedidos" -Method OPTIONS -Headers @{Origin="http://localhost:4200";"Access-Control-Request-Method"="GET"} -UseBasicParsing
+# Backend en EC2 responde (sin pasar por el API Manager)
+Invoke-WebRequest "http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com/health" -UseBasicParsing
+
+--------------------------------------------------------------------------------
+7. CHECKLIST FINAL ANTES DE LA PRESENTACION
+--------------------------------------------------------------------------------
+[ ] Capturas Azure: tenant overview, users, apps, scopes, roles, redirect URIs
+[ ] Capturas AWS: rutas + authorizer, CORS, stage prod
+[ ] Capturas navegador: login, dashboard con claims/roles, dev-tools authorize
+[ ] Resultados del script evidencias-api-manager.ps1 (200/201/401/403 + JSON)
+[ ] Pegar todo en docs/presentacion-EP2.md reemplazando [CAPTURA]
+[ ] Ensayar cronometrado (objetivo <= 8 min)
+[ ] Git push -> entregar en AVA
+================================================================================

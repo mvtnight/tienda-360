@@ -8,7 +8,7 @@ param(
     [string]$S3Key    = "pedidos360-backend.jar",
     [string]$TenantId = "0b4bca41-b3f5-427c-aeac-2dbcd055f91d",
     [string]$ApiClientId = "6da3f8f4-905c-4c76-abf0-c711d0dd3926",
-    [string]$SpaOrigin = "http://localhost:4200"
+    [string]$SpaOrigin = "http://localhost:4200,https://d2u1dalj9nm2b1.cloudfront.net"
 )
 
 $ErrorActionPreference = "Stop"
