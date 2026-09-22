@@ -5,7 +5,7 @@
     <a routerLink="/pedidos" routerLinkActive="active">Pedidos</a>
   </nav>
   <div class="user">
-    <span class="env">Ambiente: {{ ambiente }}</span>
+    <span class="env">Ambiente: {{ ambiente }} <span class="build-id">build fix52</span></span>
     @if (authState.authenticated()) {
       <span class="user-name">{{ userName }}</span>
       <span class="badges">

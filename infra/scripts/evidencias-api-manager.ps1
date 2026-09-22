@@ -8,6 +8,9 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$Token2 = "",
 
+    [Parameter(Mandatory = $false)]
+    [string]$TokenRopc = "",
+
     [string]$Alb = "http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com",
 
     [string]$OutDir = ""
@@ -35,6 +38,7 @@ function Get-ExpectedStatus {
     switch -Regex ($Case) {
         "sin-token"          { return "401" }
         "invalido"           { return "401" }
+        "ropc"               { return "401" }
         "post-pedidos"       { return "201" }
         "delete-pedido-admin"{ return "204" }
         "patch-estado-admin" { return "200" }
@@ -122,6 +126,14 @@ Invoke-Capture "01-sin-token-401" "GET" "$Api/api/pedidos"
 
 # --- 401 token invalido (firma no verificada) --------------------------------
 Invoke-Capture "02-token-invalido-401" "GET" "$Api/api/pedidos" -Bearer "token.basura.abc123"
+
+# --- 401 token ROPC (issuer sts.windows.net != login.microsoftonline.com/v2.0) -
+if ($TokenRopc) {
+    Invoke-Capture "12-token-ropc-401" "GET" "$Api/api/pedidos" -Bearer $TokenRopc
+    Write-Host "[..] Se usa -TokenRopc: el API Manager rechaza tokens ROPC (iss sts.windows.net)" -ForegroundColor Yellow
+} else {
+    Write-Host "[..] Sin -TokenRopc: se omite el caso ROPC-401" -ForegroundColor Yellow
+}
 
 # --- Indicador 1/8: cada ruta con 200 + JSON ---------------------------------
 if ($Token) {
