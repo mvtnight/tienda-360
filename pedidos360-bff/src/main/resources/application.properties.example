@@ -14,7 +14,7 @@ app.exposed-app-uri=${AZURE_EXPOSED_APP_URI:api://00000000-0000-0000-0000-000000
 
 # URL del API Manager/API Gateway que expone el backend de pedidos
 #   Local : http://localhost:8090
-#   AWS   : https://xxxxx.execute-api.us-east-1.amazonaws.com/prod
+#   AWS   : https://xxxxx.execute-api.us-east-1.amazonaws.com
 bff.api-url=${PEDIDOS_API_URL:http://localhost:8090}
 
 # CORS: origen del SPA de desarrollo

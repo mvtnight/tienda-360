@@ -1,0 +1,5 @@
+﻿=== 12-issuer-fake-401 ===
+GET /api/pedidos
+HTTP 401
+
+

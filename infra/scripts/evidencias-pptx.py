@@ -312,7 +312,7 @@ def slide_matrix(prs, d, img_map):
         s.shapes.add_picture(img, In(0.6), In(5.5), width=In(12.1))
     else:
         box(s, 0.55, 6.0, 12.2, 0.9,
-            "[Opcional: captura DevTools Red → petición a /prod/api/pedidos → cabeceras Authorization: Bearer ...]",
+            "[Opcional: captura DevTools Red → petición a /api/pedidos → cabeceras Authorization: Bearer ...]",
             size=11, color=C_GRAY, align=PP_ALIGN.CENTER)
 
 
@@ -382,7 +382,7 @@ def mapping_images(imgdir):
 def demo_data():
     return {
         "generatedAt": "y-m-d h:m:s",
-        "api": "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod",
+        "api": "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com",
         "alb": "http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com",
         "webPublica": "https://d2u1dalj9nm2b1.cloudfront.net",
         "tenantId": "0b4bca41-b3f5-427c-aeac-2dbcd055f91d",
@@ -390,7 +390,7 @@ def demo_data():
         "spaClientId": "54b906c8-47fb-4066-a49a-b3aa7f05427e",
         "apiClientId": "6da3f8f4-905c-4c76-abf0-c711d0dd3926",
         "scope": "api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user",
-        "issuer": "https://login.microsoftonline.com/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/v2.0",
+        "issuer": "https://sts.windows.net/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/",
         "usuarios": [
             {"email": "maria@matiaspulgar.onmicrosoft.com", "rol": "PEDIDOS_VENDEDOR"},
             {"email": "jose@matiaspulgar.onmicrosoft.com", "rol": "PEDIDOS_ADMIN"},
@@ -439,7 +439,7 @@ def main():
     if args.demo:
         d = demo_data()
     else:
-        with open(args.json, "r", encoding="utf-8") as fh:
+        with open(args.json, "r", encoding="utf-8-sig") as fh:
             d = json.load(fh)
     img_map = mapping_images(args.img)
     prs = build(new_prs(), d, img_map)

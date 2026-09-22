@@ -1,15 +1,12 @@
 param(
     [Parameter(Mandatory = $false)]
-    [string]$Api = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod",
+    [string]$Api = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com",
 
     [Parameter(Mandatory = $false)]
     [string]$Token = "",
 
     [Parameter(Mandatory = $false)]
     [string]$Token2 = "",
-
-    [Parameter(Mandatory = $false)]
-    [string]$TokenRopc = "",
 
     [string]$Alb = "http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com",
 
@@ -27,7 +24,10 @@ param(
 #   -Token2 $TOKEN_JOSE   -> agrega PATCH 200, DELETE 204 (rol admin)
 #   -OutDir "docs\evidencias\demo" -> ahi se guardan los .txt + resumen.md
 #
-# $TOKEN se obtiene con el boton "Copiar access_token (PKCE)" del Dashboard.
+# $TOKEN se obtiene del Dashboard (boton "Copiar access_token") o con
+# infra\scripts\renovar-tokens.ps1. El authorizer acepta cualquier token VALIDO
+# del tenant que incluya el scope access_as_user (PKCE o ROPC) y valida el issuer
+# exacto https://sts.windows.net/<tenant>/ (la app API emite tokens v1.0).
 # ============================================================================
 
 $ErrorActionPreference = "Continue"
@@ -38,7 +38,7 @@ function Get-ExpectedStatus {
     switch -Regex ($Case) {
         "sin-token"          { return "401" }
         "invalido"           { return "401" }
-        "ropc"               { return "401" }
+        "issuer"             { return "401" }
         "post-pedidos"       { return "201" }
         "delete-pedido-admin"{ return "204" }
         "patch-estado-admin" { return "200" }
@@ -127,33 +127,56 @@ Invoke-Capture "01-sin-token-401" "GET" "$Api/api/pedidos"
 # --- 401 token invalido (firma no verificada) --------------------------------
 Invoke-Capture "02-token-invalido-401" "GET" "$Api/api/pedidos" -Bearer "token.basura.abc123"
 
-# --- 401 token ROPC (issuer sts.windows.net != login.microsoftonline.com/v2.0) -
-if ($TokenRopc) {
-    Invoke-Capture "12-token-ropc-401" "GET" "$Api/api/pedidos" -Bearer $TokenRopc
-    Write-Host "[..] Se usa -TokenRopc: el API Manager rechaza tokens ROPC (iss sts.windows.net)" -ForegroundColor Yellow
-} else {
-    Write-Host "[..] Sin -TokenRopc: se omite el caso ROPC-401" -ForegroundColor Yellow
+# --- 401 token con issuer de OTRO tenant (fabricado; el authorizer valida el
+#     issuer EXACTO del tenant -> iss distinto se rechaza) ----------------------
+function New-FakeIssuerToken {
+    param([string]$Issuer)
+    $enc = {
+        param([string]$s)
+        [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) -replace '=+$', '' -replace '\+', '-' -replace '/', '_'
+    }
+    $hdr = & $enc '{"alg":"RS256","kid":"fake-key","typ":"JWT"}'
+    $payload = & $enc "{`"iss`":`"$Issuer`",`"aud`":`"api://6da3f8f4-905c-4c76-abf0-c711d0dd3926`",`"exp`":9999999999}"
+    return "$hdr.$payload.firma-no-valida"
 }
+$fakeTenant = "00000000-0000-0000-0000-000000000000"
+Invoke-Capture "12-issuer-fake-401" "GET" "$Api/api/pedidos" -Bearer (New-FakeIssuerToken -Issuer "https://sts.windows.net/$fakeTenant/")
+Write-Host "[..] Caso 12: token firmado con un issuer que NO es el tenant del proyecto -> 401" -ForegroundColor Yellow
 
 # --- Indicador 1/8: cada ruta con 200 + JSON ---------------------------------
 if ($Token) {
     Invoke-Capture "03-get-pedidos-200" "GET" "$Api/api/pedidos" -Bearer $Token
-    Invoke-Capture "04-get-pedido-id-200" "GET" "$Api/api/pedidos/1" -Bearer $Token
+
+    # Fixture: crea un pedido propio para los casos con {id} (04-09). Asi el
+    # script es re-ejecutable sin depender de que exista el id=1 sembrado.
+    $fid = $null
+    $fxToken = if ($Token2) { $Token2 } else { $Token }
+    try {
+        $fx = Invoke-RestMethod -Method Post -Uri "$Api/api/pedidos" -Headers @{ Authorization = "Bearer $fxToken" } -ContentType "application/json" -Body '{"cliente":"Fixture Evidencia","email":"fx@acme.com","items":["Item"],"total":150}' -UseBasicParsing -TimeoutSec 30
+        $fid = $fx.id
+    } catch {
+        $fid = 1
+        Write-Host "[..] No se pudo crear fixture; se usa id=1 (sembrado)" -ForegroundColor Yellow
+    }
+    Write-Host "[..] Pedido fixture id=$fid para los casos {id}" -ForegroundColor Gray
+
+    Invoke-Capture "04-get-pedido-id-200" "GET" "$Api/api/pedidos/$fid" -Bearer $Token
 
     $body = '{"cliente":"Cliente Evidencia","email":"demo@acme.com","items":["Laptop Pro","Teclado mecanico"],"total":25000}'
     Invoke-Capture "05-post-pedidos-201" "POST" "$Api/api/pedidos" -Body $body -Bearer $Token
 
     # --- 403: rol vendedor intenta PATCH/DELETE (administrativo) -------------
-    Invoke-Capture "06-patch-estado-403" "PATCH" "$Api/api/pedidos/1/estado" -Body '{"estado":"ENVIADO"}' -Bearer $Token
-    Invoke-Capture "07-delete-pedido-403" "DELETE" "$Api/api/pedidos/1" -Bearer $Token
+    Invoke-Capture "06-patch-estado-403" "PATCH" "$Api/api/pedidos/$fid/estado" -Body '{"estado":"ENVIADO"}' -Bearer $Token
+    Invoke-Capture "07-delete-pedido-403" "DELETE" "$Api/api/pedidos/$fid" -Bearer $Token
 } else {
     Write-Host "[..] Sin -Token: se omiten los casos 200/201/403 (pasa el token del navegador)" -ForegroundColor Yellow
 }
 
 # --- Casos ADMIN con -Token2 (jose): PATCH 200 y DELETE 204 ------------------
 if ($Token2) {
-    Invoke-Capture "08-patch-estado-admin-200" "PATCH" "$Api/api/pedidos/1/estado" -Body '{"estado":"ENVIADO"}' -Bearer $Token2
-    Invoke-Capture "09-delete-pedido-admin-204" "DELETE" "$Api/api/pedidos/1" -Bearer $Token2
+    if (-not $fid) { $fid = 1 }
+    Invoke-Capture "08-patch-estado-admin-200" "PATCH" "$Api/api/pedidos/$fid/estado" -Body '{"estado":"ENVIADO"}' -Bearer $Token2
+    Invoke-Capture "09-delete-pedido-admin-204" "DELETE" "$Api/api/pedidos/$fid" -Bearer $Token2
 }
 
 # --- Indicador 2: CORS (preflight) -------------------------------------------
@@ -213,6 +236,7 @@ foreach ($r in $script:results) {
     $exp = switch -Regex ($r.Case) {
         "sin-token" { "401" }
         "invalido" { "401" }
+        "issuer" { "401" }
         "post-pedidos" { "201" }
         "patch-estado-admin" { "200" }
         "delete-pedido-admin" { "204" }
@@ -240,7 +264,7 @@ $meta = [ordered]@{
     spaClientId = "54b906c8-47fb-4066-a49a-b3aa7f05427e"
     apiClientId = "6da3f8f4-905c-4c76-abf0-c711d0dd3926"
     scope = "api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user"
-    issuer = "https://login.microsoftonline.com/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/v2.0"
+    issuer = "https://sts.windows.net/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/"
     usuarios = @(
         @{ email = "maria@matiaspulgar.onmicrosoft.com"; rol = "PEDIDOS_VENDEDOR" }
         @{ email = "jose@matiaspulgar.onmicrosoft.com"; rol = "PEDIDOS_ADMIN" }
@@ -248,7 +272,7 @@ $meta = [ordered]@{
     casos = $script:results
 }
 $jsonFile = Join-Path $OutDir "resumen.json"
-$meta | ConvertTo-Json -Depth 8 | Set-Content -Path $jsonFile -Encoding UTF8
+[System.IO.File]::WriteAllText($jsonFile, ($meta | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "`n=== RESULTADOS ===" -ForegroundColor Cyan
 $script:results | Format-Table Case, Method, Url, Expected, Status, DurationMs -AutoSize

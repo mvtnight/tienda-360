@@ -1,0 +1,8 @@
+﻿=== 10-preflight-cors ===
+OPTIONS https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/api/pedidos
+HTTP 204
+
+Access-Control-Allow-Origin: http://localhost:4200
+Access-Control-Allow-Methods: DELETE,GET,OPTIONS,PATCH,POST
+Access-Control-Allow-Headers: authorization,content-type
+

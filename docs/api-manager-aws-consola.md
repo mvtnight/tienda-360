@@ -11,7 +11,7 @@ consola AWS o para sustentar la evidencia de la presentación.
 | Dato | Valor |
 |---|---|
 | Región | `us-east-2` |
-| Tenant Azure AD (issuer) | `https://login.microsoftonline.com/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/v2.0` |
+| Tenant Azure AD (issuer) | `https://sts.windows.net/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/` |
 | Audience (app API) | `api://6da3f8f4-905c-4c76-abf0-c711d0dd3926` |
 | Scope requerido | `access_as_user` |
 | Origen del SPA (CORS) | `http://localhost:4200` |
@@ -60,7 +60,8 @@ En configuración **CORS** del API:
 1. **Authorizers → Create and attach**:
    - Name: `pedidos360-jwt-authorizer`, type `JWT`
    - Identity source: `$request.header.Authorization`
-   - **Issuer**: `https://login.microsoftonline.com/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/v2.0`
+   - **Issuer**: `https://sts.windows.net/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/`
+     (los tokens del tenant son v1.0, emiten este issuer para PKCE y ROPC)
    - **Audience**: `api://6da3f8f4-905c-4c76-abf0-c711d0dd3926`
 2. **Adjúntalo a TODAS las rutas** (incluida `/health`) y en cada una marca el scope
    **`access_as_user`**.
@@ -71,9 +72,9 @@ En configuración **CORS** del API:
 
 ## Paso 5 — Deploy
 
-1. **Stage** → `prod`, **Auto-deploy** activado (o Deploy cada vez que cambies).
+1. **Stage** → `$default`, **Auto-deploy** activado (o Deploy cada vez que cambies).
 2. Endpoint base (para el BFF y las evidencias):
-   `https://<api-id>.execute-api.us-east-2.amazonaws.com/prod`
+   `https://<api-id>.execute-api.us-east-2.amazonaws.com` (stage `$default`, sin prefijo)
 
 > Este endpoint va como `PEDIDOS_API_URL` en el BFF (`application.properties` →
 > `bff.api-url=${PEDIDOS_API_URL:http://localhost:8085}`).
@@ -86,22 +87,22 @@ Con `$TOKEN` = access_token de `maria` (scope `access_as_user`):
 
 ```bash
 # Ruta 1 (sin token → 401)
-curl -i https://<api-id>.execute-api.us-east-2.amazonaws.com/prod/api/pedidos
+curl -i https://<api-id>.execute-api.us-east-2.amazonaws.com/api/pedidos
 #   -> HTTP/1.1 401 Unauthorized
 
 # Ruta 2 (con token → 200 + JSON lista de pedidos)
-curl -i -H "Authorization: Bearer $TOKEN" https://<api-id>.execute-api.us-east-2.amazonaws.com/prod/api/pedidos
+curl -i -H "Authorization: Bearer $TOKEN" https://<api-id>.execute-api.us-east-2.amazonaws.com/api/pedidos
 
 # Ruta 3 (detalle → 200 + JSON del pedido)
-curl -i -H "Authorization: Bearer $TOKEN" https://<api-id>.execute-api.us-east-2.amazonaws.com/prod/api/pedidos/1
+curl -i -H "Authorization: Bearer $TOKEN" https://<api-id>.execute-api.us-east-2.amazonaws.com/api/pedidos/1
 
 # Ruta 4 (crear → 201)
 curl -i -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"cliente":"ACME","monto":10000}' \
-  https://<api-id>.execute-api.us-east-2.amazonaws.com/prod/api/pedidos
+  https://<api-id>.execute-api.us-east-2.amazonaws.com/api/pedidos
 
 # 403: token sin scope → se demuestra con un token de otra app (o scope distinto)
-curl -i -H "Authorization: Bearer $TOKEN_SIN_SCOPE" https://<api-id>.execute-api.us-east-2.amazonaws.com/prod/api/pedidos
+curl -i -H "Authorization: Bearer $TOKEN_SIN_SCOPE" https://<api-id>.execute-api.us-east-2.amazonaws.com/api/pedidos
 #   -> HTTP/1.1 403 Forbidden
 ```
 
@@ -111,7 +112,7 @@ curl -i -H "Authorization: Bearer $TOKEN_SIN_SCOPE" https://<api-id>.execute-api
 
 El template `infra/cloudformation/api-gateway-httpapi.yaml` crea **exactamente** esto
 (rutas por recurso, CORS `SpaOrigin`, authorizer JWT issuer/audience, scope
-`access_as_user` en todas las rutas, stage `prod`). Desplegar con:
+`access_as_user` en todas las rutas, stage `$default`). Desplegar con:
 
 ```powershell
 .\infra\scripts\deploy.ps1

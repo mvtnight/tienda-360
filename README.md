@@ -39,7 +39,7 @@ que valida el mismo token con los mismos criterios que el BFF.
 
 ## Despliegue en AWS (REAL y en producción)
 
-- **Api Manager (endpoint)**: `https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod`
+- **Api Manager (endpoint)**: `https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com` (stage `$default`)
 - **Stack ALB + EC2**: `pedidos360-alb` (ALB `pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com`, EC2 `i-068c9d685225f19f3`)
 - **Stack API Manager**: `pedidos360-httpapi`
 - Región `us-east-2`, cuenta `637423629193`; bucket `pedidos360-matiaspulgar` (jar: `pedidos360-backend.jar`).
@@ -76,8 +76,7 @@ powershell -ExecutionPolicy Bypass -File infra\scripts\deploy.ps1
 | Client ID App SPA | `54b906c8-47fb-4066-a49a-b3aa7f05427e` |
 | Client ID App API (pedidos-api) | `6da3f8f4-905c-4c76-abf0-c711d0dd3926` |
 | Scope | `api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user` |
-| Issuer (browser/PKCE) | `https://login.microsoftonline.com/<tenant>/v2.0` |
-| Issuer (ROPC) | `https://sts.windows.net/<tenant>/` |
+| Issuer de TODOS los tokens | `https://sts.windows.net/<tenant>/` (tokens v1.0: la app API no fija `accessTokenAcceptedVersion`; PKCE y ROPC emiten este issuer) |
 | Usuarios de prueba | `maria@…` (PEDIDOS_VENDEDOR) y `jose@…` (PEDIDOS_ADMIN) |
 
 > Los roles vienen en el claim `roles` en minúsculas; las aplicaciones los
@@ -91,7 +90,7 @@ cd pedidos360-backend && mvnw.cmd package && java -jar target\pedidos360-backend
 # 2) bff      → :8085  (opcional: apuntar al API Manager de AWS)
 cd pedidos360-bff && mvnw.cmd package && java -jar target\pedidos360-bff-0.0.1-SNAPSHOT.jar
 #    con el API Manager de AWS:
-set PEDIDOS_API_URL=https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod
+set PEDIDOS_API_URL=https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com
 # 3) frontend → :4200
 cd pedidos360-front && npm start
 ```

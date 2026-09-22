@@ -1,0 +1,132 @@
+﻿{
+    "generatedAt":  "2026-09-22 19:29:47",
+    "api":  "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com",
+    "alb":  "http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com",
+    "webPublica":  "https://d2u1dalj9nm2b1.cloudfront.net",
+    "tenantId":  "0b4bca41-b3f5-427c-aeac-2dbcd055f91d",
+    "dominio":  "matiaspulgar.onmicrosoft.com",
+    "spaClientId":  "54b906c8-47fb-4066-a49a-b3aa7f05427e",
+    "apiClientId":  "6da3f8f4-905c-4c76-abf0-c711d0dd3926",
+    "scope":  "api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user",
+    "issuer":  "https://sts.windows.net/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/",
+    "usuarios":  [
+                     {
+                         "email":  "maria@matiaspulgar.onmicrosoft.com",
+                         "rol":  "PEDIDOS_VENDEDOR"
+                     },
+                     {
+                         "email":  "jose@matiaspulgar.onmicrosoft.com",
+                         "rol":  "PEDIDOS_ADMIN"
+                     }
+                 ],
+    "casos":  [
+                  {
+                      "Case":  "01-sin-token-401",
+                      "Method":  "GET",
+                      "Url":  "/api/pedidos",
+                      "Status":  401,
+                      "Expected":  "401",
+                      "DurationMs":  661,
+                      "Content":  ""
+                  },
+                  {
+                      "Case":  "02-token-invalido-401",
+                      "Method":  "GET",
+                      "Url":  "/api/pedidos",
+                      "Status":  401,
+                      "Expected":  "401",
+                      "DurationMs":  166,
+                      "Content":  ""
+                  },
+                  {
+                      "Case":  "12-issuer-fake-401",
+                      "Method":  "GET",
+                      "Url":  "/api/pedidos",
+                      "Status":  401,
+                      "Expected":  "401",
+                      "DurationMs":  621,
+                      "Content":  ""
+                  },
+                  {
+                      "Case":  "03-get-pedidos-200",
+                      "Method":  "GET",
+                      "Url":  "/api/pedidos",
+                      "Status":  200,
+                      "Expected":  "200",
+                      "DurationMs":  522,
+                      "Content":  "[{\"id\":1,\"cliente\":\"Ana GÃ³mez\",\"email\":\"ana@acme.com\",\"items\":[\"Laptop Pro 16\",\"Teclado mecÃ¡nico\"],\"total\":1899.99,\"estado\":\"CANCELADO\",\"creador\":null,\"createdAt\":\"2026-09-15T20:39:48.134515Z\"},{\"id\":2,\"cliente\":\"Carlos Ruiz\",\"email\":\"carlos@acme.com\",\"items\":[\"Monitor 27\\\" 4K\"],\"total\":429.50,\"estado\":\"RECIBIDO\",\"creador\":null,\"createdAt\":\"2026-09-15T20:39:48.134769Z\"},{\"id\":3,\"cliente\":\"Test Denied\",\"email\":\"x@y.cl\",\"items\":[\"Item\"],\"total\":50.00,\"estado\":\"RECIBIDO\",\"creador\":\"_PsmgXr2hLP2pZi6pmHoRHEkS9r4a5afsbyjgq_sKqk\",\"createdAt\":\"2026-09-22T22:20:56.240184Z\"},{\"id\":4,\"cliente\":\"Test Matriz\",\"email\":\"t@m.cl\",\"items\":[\"Item 1\"],\"total\":100.00,\"estado\":\"CANCELADO\",\"creador\":\"YqZYB8YPfYY8cK54U0JnqdGZG2yY-Wxn0dQz7tZAZT4\",\"createdAt\":\"2026-09-22T22:21:13.537990Z\"},{\"id\":5,\"cliente\":\"Test Denied\",\"email\":\"x@y.cl\",\"items\":[\"Item\"],\"total\":50.00,\"estado\":\"CANCELADO\",\"creador\":\"_PsmgXr2hLP2pZi6pmHoRHEkS9r4a5afsbyjgq_sKqk\",\"createdAt\":\"2026-09-22T22:21:16.326721Z\"},{\"id\":6,\"cliente\":\"Cliente Evidencia\",\"email\":\"demo@acme.com\",\"items\":[\"Laptop Pro\",\"Teclado mecanico\"],\"total\":25000.00,\"estado\":\"CANCELADO\",\"creador\":\"_PsmgXr2hLP2pZi6pmHoRHEkS9r4a5afsbyjgq_sKqk\",\"createdAt\":\"2026-09-22T22:22:07.283855Z\"}]"
+                  },
+                  {
+                      "Case":  "04-get-pedido-id-200",
+                      "Method":  "GET",
+                      "Url":  "/api/pedidos/7",
+                      "Status":  200,
+                      "Expected":  "200",
+                      "DurationMs":  470,
+                      "Content":  "{\"id\":7,\"cliente\":\"Fixture Evidencia\",\"email\":\"fx@acme.com\",\"items\":[\"Item\"],\"total\":150.00,\"estado\":\"RECIBIDO\",\"creador\":\"YqZYB8YPfYY8cK54U0JnqdGZG2yY-Wxn0dQz7tZAZT4\",\"createdAt\":\"2026-09-22T22:29:45.390275Z\"}"
+                  },
+                  {
+                      "Case":  "05-post-pedidos-201",
+                      "Method":  "POST",
+                      "Url":  "/api/pedidos",
+                      "Status":  201,
+                      "Expected":  "201",
+                      "DurationMs":  827,
+                      "Content":  "{\"id\":8,\"cliente\":\"Cliente Evidencia\",\"email\":\"demo@acme.com\",\"items\":[\"Laptop Pro\",\"Teclado mecanico\"],\"total\":25000,\"estado\":\"RECIBIDO\",\"creador\":\"_PsmgXr2hLP2pZi6pmHoRHEkS9r4a5afsbyjgq_sKqk\",\"createdAt\":\"2026-09-22T22:29:46.853672033Z\"}"
+                  },
+                  {
+                      "Case":  "06-patch-estado-403",
+                      "Method":  "PATCH",
+                      "Url":  "/api/pedidos/7/estado",
+                      "Status":  403,
+                      "Expected":  "403",
+                      "DurationMs":  709,
+                      "Content":  ""
+                  },
+                  {
+                      "Case":  "07-delete-pedido-403",
+                      "Method":  "DELETE",
+                      "Url":  "/api/pedidos/7",
+                      "Status":  403,
+                      "Expected":  "403",
+                      "DurationMs":  451,
+                      "Content":  ""
+                  },
+                  {
+                      "Case":  "08-patch-estado-admin-200",
+                      "Method":  "PATCH",
+                      "Url":  "/api/pedidos/7/estado",
+                      "Status":  200,
+                      "Expected":  "200",
+                      "DurationMs":  838,
+                      "Content":  "{\"id\":7,\"cliente\":\"Fixture Evidencia\",\"email\":\"fx@acme.com\",\"items\":[\"Item\"],\"total\":150.00,\"estado\":\"ENVIADO\",\"creador\":\"YqZYB8YPfYY8cK54U0JnqdGZG2yY-Wxn0dQz7tZAZT4\",\"createdAt\":\"2026-09-22T22:29:45.390275Z\"}"
+                  },
+                  {
+                      "Case":  "09-delete-pedido-admin-204",
+                      "Method":  "DELETE",
+                      "Url":  "/api/pedidos/7",
+                      "Status":  204,
+                      "Expected":  "204",
+                      "DurationMs":  547,
+                      "Content":  ""
+                  },
+                  {
+                      "Case":  "10-preflight-cors",
+                      "Method":  "OPTIONS",
+                      "Url":  "/api/pedidos (preflight CORS)",
+                      "Status":  204,
+                      "Expected":  "204",
+                      "DurationMs":  0,
+                      "Content":  "Access-Control-Allow-Origin: http://localhost:4200\nAccess-Control-Allow-Methods: DELETE,GET,OPTIONS,PATCH,POST\nAccess-Control-Allow-Headers: authorization,content-type\n"
+                  },
+                  {
+                      "Case":  "11-backend-ec2-health",
+                      "Method":  "GET",
+                      "Url":  "/health (ALB directo)",
+                      "Status":  200,
+                      "Expected":  "200",
+                      "DurationMs":  0,
+                      "Content":  "{\"status\":\"OK\"}"
+                  }
+              ]
+}

@@ -1,0 +1,5 @@
+﻿=== 08-patch-estado-admin-200 ===
+PATCH /api/pedidos/7/estado
+HTTP 200
+
+{"id":7,"cliente":"Fixture Evidencia","email":"fx@acme.com","items":["Item"],"total":150.00,"estado":"ENVIADO","creador":"YqZYB8YPfYY8cK54U0JnqdGZG2yY-Wxn0dQz7tZAZT4","createdAt":"2026-09-22T22:29:45.390275Z"}

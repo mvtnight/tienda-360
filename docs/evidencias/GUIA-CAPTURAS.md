@@ -30,9 +30,9 @@ Cómo llegar: `portal.azure.com` → **Microsoft Entra ID** (o **App registratio
 | # | Nombre de archivo | Qué capturar | Slide |
 |---|-------------------|--------------|-------|
 | 8 | `routes.png` | **API Gateway → API (pedidos360-httpapi) → Routes**: lista con GET/POST/PATCH/DELETE `/api/pedidos...`, `/health`, `/{proxy+}` y el authorizer JWT en cada una | Rutas+CORS |
-| 9 | `authorizer.png` | **Authorization** o en una ruta, el **JWT authorizer**: issuer `https://login.microsoftonline.com/0b4bca41-.../v2.0`, audience `api://6da3f8f4-...`, IdentitySource `$request.header.Authorization`, scope `access_as_user` | Rutas+CORS |
+| 9 | `authorizer.png` | **Authorization** o en una ruta, el **JWT authorizer**: issuer `https://sts.windows.net/0b4bca41-.../`, audience `api://6da3f8f4-...`, IdentitySource `$request.header.Authorization`, scope `access_as_user` | Rutas+CORS |
 | 10 | `cors.png` | **CORS**: AllowOrigins `http://localhost:4200` y `https://d2u1dalj9nm2b1.cloudfront.net`; AllowHeaders `Authorization, Content-Type`; Methods GET/POST/PATCH/DELETE/OPTIONS | Rutas+CORS |
-| 11 | `stage.png` | **Stages → prod**: Invoke URL `https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod` (y auto-deploy ON) | Rutas+CORS |
+| 11 | `stage.png` | **Stages → $default**: Invoke URL `https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com` (sin prefijo; auto-deploy ON) | Rutas+CORS |
 
 Cómo llegar: `console.aws.amazon.com/apigateway` (región **us-east-2**) → API Gateway → la API `pedidos360-httpapi`.
 
@@ -45,7 +45,7 @@ Cómo llegar: `console.aws.amazon.com/apigateway` (región **us-east-2**) → AP
 | 12 | `login.png` | `https://d2u1dalj9nm2b1.cloudfront.net` → botón **Ingresar** → página de login de Microsoft (jose o maria) | Login+PKCE |
 | 13 | `claims.png` | **Perfil/claims** del Dashboard: nombre, email, oid y **roles PEDIDOS_ADMIN / PEDIDOS_VENDEDOR** | Login+PKCE |
 | 14 | `authorize.png` | DevTools → **Red** → marca `/authorize` → URL con `response_type=code&code_challenge=...&code_challenge_method=S256&state=...&nonce=...` (es el Authorization Code + PKCE real) | Login+PKCE |
-| 15 | `headers.png` | DevTools → **Red** → `GET /prod/api/pedidos` → **Encabezados** → `Authorization: Bearer eyJ...` (¡interceptor agregando el token!) | Matriz |
+| 15 | `headers.png` | DevTools → **Red** → `GET /api/pedidos` → **Encabezados** → `Authorization: Bearer eyJ...` (¡interceptor agregando el token!) | Matriz |
 | 16 | `cors-preflight.png` | (opcional) DevTools → petición **OPTIONS** con status **204** y `access-control-allow-origin` | Rutas+CORS |
 
 ---

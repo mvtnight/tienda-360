@@ -1,0 +1,5 @@
+﻿=== 05-post-pedidos-201 ===
+POST /api/pedidos
+HTTP 201
+
+{"id":8,"cliente":"Cliente Evidencia","email":"demo@acme.com","items":["Laptop Pro","Teclado mecanico"],"total":25000,"estado":"RECIBIDO","creador":"_PsmgXr2hLP2pZi6pmHoRHEkS9r4a5afsbyjgq_sKqk","createdAt":"2026-09-22T22:29:46.853672033Z"}

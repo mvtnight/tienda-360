@@ -1,0 +1,5 @@
+﻿=== 09-delete-pedido-admin-204 ===
+DELETE /api/pedidos/7
+HTTP 204
+
+

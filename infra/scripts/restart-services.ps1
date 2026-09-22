@@ -1,7 +1,7 @@
 param(
     [switch]$Start,           # Levanta servicios que esten apagados
     [switch]$WithAws,         # Bff apunta al API Manager de AWS
-    [string]$AwsEndpoint = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod"
+    [string]$AwsEndpoint = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com"
 )
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path

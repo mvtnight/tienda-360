@@ -12,12 +12,12 @@ ClientId SPA (public)  : 54b906c8-47fb-4066-a49a-b3aa7f05427e
 ClientId API           : 6da3f8f4-905c-4c76-abf0-c711d0dd3926
 App ID URI             : api://6da3f8f4-905c-4c76-abf0-c711d0dd3926
 Scope                  : api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user
-Issuer (navegador/PKCE): https://login.microsoftonline.com/<tenant>/v2.0
-Issuer (ROPC)          : https://sts.windows.net/<tenant>/
-Endpoint API Manager   : https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod
+Issuer (todos los tokens) : https://sts.windows.net/<tenant>/   (app API sin
+                            accessTokenAcceptedVersion -> tokens v1.0 PKCE y ROPC)
+Endpoint API Manager   : https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com
 ALB (EC2 backend)      : http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com
 Web publica (S3+CloudFront): https://d2u1dalj9nm2b1.cloudfront.net
-Puertos: backend 8090 | bff 8085 | SPA 4200 | API Manager prod
+Puertos: backend 8090 | bff 8085 | SPA 4200 | API Manager (stage $default)
 
 USUARIOS DE PRUEBA
   maria@matiaspulgar.onmicrosoft.com  -> rol PEDIDOS_VENDEDOR  (no admin)
@@ -36,8 +36,7 @@ RUTAS DEL API MANAGER (todas con JWT+scope access_as_user):
   GET    /api/pedidos/{id}               -> backend detalle
   POST   /api/pedidos                    -> backend crear
   PATCH  /api/pedidos/{id}/estado        -> backend cambiar estado
-  DELETE /api/pedidos/{id}               -> backend eliminar
-  ANY    /{proxy+}                       -> catch-all protegido (nada queda libre)
+DELETE /api/pedidos/{id}               -> backend eliminar
 
 --------------------------------------------------------------------------------
 2. FLUJO (dilo en 3 frases)
@@ -49,7 +48,8 @@ RUTAS DEL API MANAGER (todas con JWT+scope access_as_user):
    aud es api://6da3f8f4... y scope access_as_user. El interceptor adjunta
    Authorization: Bearer <token> a las llamadas al BFF (local) o al API Manager.
 3) El API Manager (API Gateway) valida el JWT en TODAS las rutas: firma JWKS,
-   issuer = login.microsoftonline.com/<tenant>/v2.0, audience = api://<client-id>,
+   issuer = https://sts.windows.net/<tenant>/ (tokens v1.0 que emite la app API),
+   audience = api://<client-id>,
    y exige scope access_as_user. Sin token -> 401, token sin scope -> 403.
 4) Si es valido, proxya al ALB -> EC2 backend (:8090). El backend RE-valida y
    aplica RBAC: cualquier autenticado lee; ADMIN o VENDEDOR crea; solo ADMIN
@@ -68,7 +68,7 @@ MATRIZ 200/401/403 (aprenderla):
 3. QUE VALIDA CADA CAPA (pregunta casi segura del profe)
 --------------------------------------------------------------------------------
 - BFF (JwtDecoderConfig): descarga JWKS de discovery/v2.0/keys, firma RS256,
-  iss (login.microsoftonline.com/<t>/v2.0 o sts.windows.net/<t>/), aud
+  iss (https://sts.windows.net/<t>/), aud
   (clientId o app URI), exp/nbf. Falla -> 401.
 - API Manager (API Gateway): authorizer JWT con issuer Y audience; por eso es
   "el mismo criterio que el BFF". IdentitySource = header Authorization.
@@ -96,10 +96,11 @@ Q: ¿Como se genera el code_challenge?
 R: code_verifier aleatorio -> SHA-256 -> base64url -> code_challenge, con
    método S256. MSAL lo hace internamente.
 
-Q: ¿ROPC por que no sirve para el API Manager?
-R: Porque su issuer es sts.windows.net y el authorizer exige el issuer exacto
-   login.microsoftonline.com/<tenant>/v2.0 (el del navegador). Es una
-   consistencia con el flujo real.
+Q: ¿ROPC sirve para el API Manager?
+R: Sí. Como la app API no fija version de token, Microsoft emite tokens v1.0
+   (issuer sts.windows.net/<tenant>/) para TODOS los flujos, PKCE y ROPC; el
+   authorizer valida ese issuer exacto, asi que ambos pasan. El token del
+   navegador se usa en la demo por ser el flujo real del usuario.
 
 Q: ¿Donde se guardan los passwords?
 R: En el tenant de Azure AD; el usuario nunca entrega la clave a la app ni al
@@ -132,7 +133,7 @@ R: Azure manda 'roles' en minusculas (pedidos_admin / pedidos_vendedor); el
 --------------------------------------------------------------------------------
 6. COMANDOS RAPIDOS DE EVIDENCIA (si no tienes el script a mano)
 --------------------------------------------------------------------------------
-$api = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod"
+$api = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com"
 # 401 sin token
 Invoke-WebRequest "$api/api/pedidos" -UseBasicParsing
 # 200 maria (GET)
@@ -149,7 +150,7 @@ Invoke-WebRequest "http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.
 7. CHECKLIST FINAL ANTES DE LA PRESENTACION
 --------------------------------------------------------------------------------
 [ ] Capturas Azure: tenant overview, users, apps, scopes, roles, redirect URIs
-[ ] Capturas AWS: rutas + authorizer, CORS, stage prod
+[ ] Capturas AWS: rutas + authorizer, CORS, stage $default
 [ ] Capturas navegador: login, dashboard con claims/roles, dev-tools authorize
 [ ] Resultados del script evidencias-api-manager.ps1 (200/201/401/403 + JSON)
 [ ] Pegar todo en docs/presentacion-EP2.md reemplazando [CAPTURA]

@@ -5,10 +5,14 @@ param(
     [string]$Password = ""
 )
 
-# Renueva los tokens ROPC de maria y jose (validez ~1h). Util para las
-# evidencias locales y como respaldo si el login interactivo falla.
-# NOTA: el API Manager solo acepta tokens PKCE del navegador (issuer mismatch
-# para ROPC), para proven en AWS usa el boton "Copiar access_token" de la SPA.
+# Renueva los tokens ROPC de maria y jose (validez ~1h). Sirven para las
+# evidencias automatizadas (evidencias-api-manager.ps1) porque el API Manager
+# valida el issuer sts.windows.net/<tenant>/ de los tokens v1.0 (PKCE y ROPC),
+# no el flujo.
+
+# OPCIONAL: guarda tu contrasena en una variable de entorno PEDIDOS360_UA_PW
+# para no escribirla en cada ejecucion.
+if (-not $Password) { $Password = $env:PEDIDOS360_UA_PW }
 
 $out = "$env:LOCALAPPDATA\Temp\opencode"
 New-Item -ItemType Directory -Force -Path $out | Out-Null
@@ -31,4 +35,5 @@ foreach ($user in @("maria@matiaspulgar.onmicrosoft.com", "jose@matiaspulgar.onm
 }
 
 Write-Host ""
-Write-Host "Usa -Password '<clave>' para renovar. Tokens para BFF/backend LOCAL (no pasan el API Manager)."
+Write-Host "Usa -Password '<clave>' para renovar. Los tokens sirven para BFF/backend"
+Write-Host "local y para la evidencia del API Manager (issuer sts.windows.net valido)."

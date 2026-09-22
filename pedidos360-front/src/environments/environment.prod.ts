@@ -14,10 +14,10 @@ export const environment = {
 
   apiScope: 'api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user',
 
-  bffUrl: 'https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod',
+  bffUrl: 'https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com',
 
   apiGateway: {
     enabled: true,
-    baseUrl: 'https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod/api'
+    baseUrl: 'https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/api'
   }
 };

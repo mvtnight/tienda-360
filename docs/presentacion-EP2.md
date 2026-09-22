@@ -40,8 +40,8 @@ antes de dejar pasar una petición."
 | API clientId | `6da3f8f4-905c-4c76-abf0-c711d0dd3926` |
 | App ID URI | `api://6da3f8f4-905c-4c76-abf0-c711d0dd3926` |
 | Scope | `api://6da3f8f4-905c-4c76-abf0-c711d0dd3926/access_as_user` |
-| Issuer (API GW) | `https://login.microsoftonline.com/0b4bca41-.../v2.0` |
-| API Manager | `https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod` |
+| Issuer validado | `https://sts.windows.net/0b4bca41-.../` (tokens v1.0 que emite la app API para TODOS los clientes; el authorizer exige el issuer exacto del tenant → issuer de otro tenant → 401) |
+| API Manager | `https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com` (stage `$default`, sin prefijo) |
 | Web pública | `https://d2u1dalj9nm2b1.cloudfront.net` |
 | ALB / EC2 | `http://pedidos360-alb-dev-2080390497.us-east-2.elb.amazonaws.com` |
 | Usuarios | `jose@...` → **PEDIDOS_ADMIN** · `maria@...` → **PEDIDOS_VENDEDOR** |
@@ -94,9 +94,8 @@ Roles: **2** (`PEDIDOS_ADMIN`, `PEDIDOS_VENDEDOR`). El backend normaliza el clai
 | POST | /api/pedidos | crear |
 | PATCH | /api/pedidos/{id}/estado | estado |
 | DELETE | /api/pedidos/{id} | eliminar |
-| ANY | /{proxy+} | catch-all protegido (nada libre) |
 
-Authorizer: issuer tenant + audience `api://6da3f8f4-...`. `[CAPTURA: authorizer.png]`
+Authorizer: issuer `https://sts.windows.net/<tenant>/` + audience `api://6da3f8f4-...`. `[CAPTURA: authorizer.png]`
 
 ### S7 · CORS en el API Manager (0:30) — Indicador 2 (7%)
 `[CAPTURA: cors.png]`
@@ -117,7 +116,8 @@ El **deck** (`Pedidos360-Evidencias.pptx`) muestra la **matriz coloreada** con c
   duración y el **JSON real** devuelto por el backend.
 - Incluye preflight CORS (204) y health directo al ALB (`{"status":"OK"}`).
 - Fuente: `resumen.json` generado por `infra/scripts/evidencias-api-manager.ps1` con los tokens
-  PKCE del navegador (botón **Copiar access_token** del Dashboard).
+  del navegador (botón **Copiar access_token** del Dashboard) o del ROPC de `renovar-tokens.ps1`
+  (ambos salen v1.0 con issuer `sts.windows.net`, que es el que valida el authorizer).
 - Interceptor con el header: `[CAPTURA: headers.png]` (Authorization: Bearer eyJ...).
 
 ### S10 · Cierre (0:30)

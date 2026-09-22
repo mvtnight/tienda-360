@@ -58,8 +58,8 @@ Por eso el mismo endpoint responde distinto segun quien llame: 200, 201, 401, 40
     "Copiar access_token (PKCE)" para obtener el token real del navegador.
   - Pedidos lista pedidos y permite crear si el rol lo permite.
 - pedidos360-bff      : Spring Boot 3.5 (Java 21 local, JDK 22). Puerto 8085.
-  - JwtDecoderConfig: JWKS (RS256) + iss (login.microsoftonline.com/.../v2.0 y
-    sts.windows.net/tenant) + aud (client id o uri de la API) + exp/nbf.
+  - JwtDecoderConfig: JWKS (RS256) + iss (sts.windows.net/tenant) + aud (client id
+    o uri de la API) + exp/nbf.
   - BffController: /bff/pedidos (GET), /bff/pedidos/{id} (GET), POST, PATCH
     /bff/pedidos/{id}/estado y DELETE /bff/pedidos/{id}.
   - BffRestClientService: reenvia el mismo Bearer con RestClient.
@@ -91,8 +91,8 @@ Usuarios de prueba (contrasena entregada en clase, solo para demo):
 
 Claims importantes en el access_token:
   - aud  : api://6da3f8f4-...  (el que validan BFF y API Manager)
-  - iss  : https://login.microsoftonline.com/<tenant>/v2.0 (navegador/PKCE)
-           o https://sts.windows.net/<tenant>/ (ROPC)
+  - iss  : https://sts.windows.net/<tenant>/  (la app API emite tokens v1.0 con
+           este issuer PARA TODOS los clientes, PKCE y ROPC)
   - roles: ["pedidos_vendedor"] o ["pedidos_admin"] (en minusculas, se normalizan)
   - exp/nbf : validez.
 
@@ -100,8 +100,10 @@ Claims importantes en el access_token:
 4. COMO SACAR UN TOKEN DE PRUEBA (ROPC) DESDE LAS CONSOLAS
 --------------------------------------------------------------------------
 (Usa un token del navegador con el boton "Copiar access_token" para el API Manager.
- Para pruebas locales el ROPC tambien sirve; el API Manager NO acepta ROPC por
- que su issuer es sts.windows.net. Ver punto 6.)
+ El ROPC (grant_type=password) tambien genera tokens VALIDOS para el API Manager:
+ el recurso (app API) no define accessTokenAcceptedVersion, asi que TODOS los
+ tokens salen v1.0 con issuer sts.windows.net, que es exactamente el que valida
+ el authorizer. Para evidencias automatizadas basta renovar-tokens.ps1.)
 
 Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/0b4bca41-b3f5-427c-aeac-2dbcd055f91d/oauth2/v2.0/token" `
   -ContentType "application/x-www-form-urlencoded" -Body @{
@@ -117,13 +119,13 @@ Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/0b4bca41-
 --------------------------------------------------------------------------
 BFF (JwtDecoderConfig):
   - Obtiene JWKS desde https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys
-  - Firma RS256; iss permite login.microsoftonline.com/<tenant>/v2.0 y
-    sts.windows.net/<tenant>/ ; aud igual al client-id o a la App ID URI;
+  - Firma RS256; iss = https://sts.windows.net/<tenant>/ ; aud igual al
+    client-id o a la App ID URI;
     con exp/nbf obligatorios. Falla -> 401 con JSON de error.
 API Manager (AWS):
   - JWT authorizer del API Gateway con IdentitySource = header Authorization.
   - JwtConfiguration.audience = api://<client-id> ; issuer =
-    https://login.microsoftonline.com/<tenant>/v2.0
+    https://sts.windows.net/<tenant>/
   - AuthorizationScopes = access_as_user en todas las rutas (token valido pero
     sin scope -> 403).
   - Todas las rutas del API Gateway estan protegidas, incluida /health.
@@ -147,12 +149,12 @@ WEB PUBLICA (CloudFront):
 --------------------------------------------------------------------------
 6. POR QUE EL API GATEWAY REQUIERE TOKEN DEL NAVEGADOR (IMPORTANTE)
 --------------------------------------------------------------------------
-El JWT authorizer de AWS valida el issuer EXACTO que configuramos (login.microsoftonline
-.com/v2.0), el mismo que emiten los tokens del flujo del navegador (Authorization
-Code + PKCE). Los tokens ROPC/device-code pueden venir con issuer sts.windows.net,
-por lo que el API Gateway los rechaza con 401. Por eso la evidencia del API Manager
-se hace con el token copiado desde la SPA (boton "Copiar access_token"), que es
-exactamente el token real del flujo del navegador.
+El JWT authorizer de AWS valida el issuer EXACTO que configuramos
+(https://sts.windows.net/<tenant>/). La app API no define accessTokenAcceptedVersion,
+asi que Microsoft emite tokens v1.0 con ese issuer para TODOS los flujos (navegador
+PKCE, ROPC, device code). Por eso el API Manager acepta tanto el token copiado de la
+SPA (boton "Copiar access_token") como el ROPC de renovar-tokens.ps1; lo unico que da
+401 es un token con issuer de OTRO tenant o firma alterada (caso 12 de la matriz).
 
 --------------------------------------------------------------------------------
 7. AWS - DESPLIEGUE REAL (lo que esta vivo ahora mismo)
@@ -165,7 +167,7 @@ Stack ALB/EC2  : pedidos360-alb
    EC2         : i-068c9d685225f19f3 (running), IP publica 18.191.85.206
                  instala Java 21 Corretto, baja el jar de S3, systemd pedidos360-backend.
 Stack API GW   : pedidos360-httpapi
-   ApiEndpoint : https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod
+   ApiEndpoint : https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com (stage $default)
 VPC/Subnets    : vpc-0244fc236a6eb21dc (172.31.0.0/16) con
                  subnet-03251d8d1fa4a3af2 (us-east-2a) y
                  subnet-09cceb5a59068a67f (us-east-2b)
@@ -230,7 +232,7 @@ EP1 = 60% SPA Angular + MSAL  y  40% BFF valida token igual que el API Manager.
     (health check), idealmente con GET/POST devolviendo el JSON real. [CAPTURA]
 
 --- Comandos de demo (PowerShell), con $T = token copiado del navegador ---
-$api = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com/prod"
+$api = "https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com"
 # 401 sin token
 Invoke-WebRequest "$api/api/pedidos" -UseBasicParsing
 # 200 maria (GET)
@@ -285,9 +287,10 @@ R: Son cuentas educativas del tenant del curso; el password sale por ROPC solo
    para pruebas automatizadas (SSO interactivo no lo pide).
 
 Q: Por que no usar el token ROPC en el API Manager?
-R: Los tokens con issuer sts.windows.net (mayoria de ROPC) no coinciden con el
-   issuer configurado en el JWT authorizer (login.microsoftonline.com/v2.0). El
-   del navegador (PKCE) si. Es una decision de consistencia con el flujo real.
+R: Se PUEDE y se usa (renovar-tokens.ps1). Como la app API no fija version de
+   token, todos los tokens (PKCE y ROPC) salen v1.0 con issuer sts.windows.net,
+   que es el que valida el authorizer. El token del navegador se usa en la demo
+   porque es el flujo real del usuario.
 
 ------------------------------------------------------------------------------
 12. EVIDENCIAS PENDIENTES (check-list)

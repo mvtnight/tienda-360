@@ -1,0 +1,5 @@
+﻿=== 07-delete-pedido-403 ===
+DELETE /api/pedidos/7
+HTTP 403
+
+

@@ -57,11 +57,17 @@ Resources:
       JwtConfiguration:
         Audience:
           - !Sub 'api://${ApiClientId}'
-        Issuer: !Sub 'https://login.microsoftonline.com/${TenantId}/v2.0'
+        # La app API (accessTokenAcceptedVersion v1.0 sin definir) emite tokens v1.0
+        # (iss = sts.windows.net/<tid>/, ver 1.0) para TODOS los flujos (PKCE y ROPC).
+        # El authorizer valida el issuer EXACTO del tenant, por lo que tokens de otros
+        # emisores (iss distinto) se rechazan con 401.
+        Issuer: !Sub 'https://sts.windows.net/${TenantId}/'
       Name: pedidos360-jwt-authorizer
 
-  # Integraciones por método (HTTP_PROXY): sin path en la URI, el request path se reenvía tal cual.
-  GetIntegration:
+  # Integraciones por ruta (HTTP_PROXY). El path del cliente NO se añade al
+  # IntegrationUri: la URL debe contener el path completo del backend, admitiendo
+  # variables del path de la ruta ({id}) que el gateway sustituye al reenviar.
+  HealthIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref Api
@@ -69,10 +75,32 @@ Resources:
       IntegrationMethod: GET
       PayloadFormatVersion: '1.0'
       ConnectionType: INTERNET
-      Description: GET al backend vía ALB
-      IntegrationUri: !Sub 'http://${ALBDnsName}'
+      Description: GET /health al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}/health'
 
-  PostIntegration:
+  ListPedidosIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      PayloadFormatVersion: '1.0'
+      ConnectionType: INTERNET
+      Description: GET /api/pedidos al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}/api/pedidos'
+
+  GetPedidoIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: GET
+      PayloadFormatVersion: '1.0'
+      ConnectionType: INTERNET
+      Description: GET /api/pedidos/{id} al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}/api/pedidos/{id}'
+
+  CreatePedidoIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref Api
@@ -80,10 +108,10 @@ Resources:
       IntegrationMethod: POST
       PayloadFormatVersion: '1.0'
       ConnectionType: INTERNET
-      Description: POST al backend vía ALB
-      IntegrationUri: !Sub 'http://${ALBDnsName}'
+      Description: POST /api/pedidos al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}/api/pedidos'
 
-  PatchIntegration:
+  UpdateEstadoIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref Api
@@ -91,10 +119,10 @@ Resources:
       IntegrationMethod: PATCH
       PayloadFormatVersion: '1.0'
       ConnectionType: INTERNET
-      Description: PATCH al backend vía ALB
-      IntegrationUri: !Sub 'http://${ALBDnsName}'
+      Description: PATCH /api/pedidos/{id}/estado al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}/api/pedidos/{id}/estado'
 
-  DeleteIntegration:
+  DeletePedidoIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref Api
@@ -102,8 +130,8 @@ Resources:
       IntegrationMethod: DELETE
       PayloadFormatVersion: '1.0'
       ConnectionType: INTERNET
-      Description: DELETE al backend vía ALB
-      IntegrationUri: !Sub 'http://${ALBDnsName}'
+      Description: DELETE /api/pedidos/{id} al backend vía ALB
+      IntegrationUri: !Sub 'http://${ALBDnsName}/api/pedidos/{id}'
 
   HealthRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -114,7 +142,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${GetIntegration}'
+      Target: !Sub 'integrations/${HealthIntegration}'
 
   ListPedidosRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -125,7 +153,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${GetIntegration}'
+      Target: !Sub 'integrations/${ListPedidosIntegration}'
 
   GetPedidoRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -136,7 +164,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${GetIntegration}'
+      Target: !Sub 'integrations/${GetPedidoIntegration}'
 
   CreatePedidoRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -147,7 +175,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${PostIntegration}'
+      Target: !Sub 'integrations/${CreatePedidoIntegration}'
 
   UpdateEstadoRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -158,7 +186,7 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${PatchIntegration}'
+      Target: !Sub 'integrations/${UpdateEstadoIntegration}'
 
   DeletePedidoRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -169,19 +197,23 @@ Resources:
       AuthorizerId: !Ref Authorizer
       AuthorizationScopes:
         - access_as_user
-      Target: !Sub 'integrations/${DeleteIntegration}'
+      Target: !Sub 'integrations/${DeletePedidoIntegration}'
 
   Stage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
       ApiId: !Ref Api
-      StageName: prod
+      # Stage $default: la URL publica queda sin prefijo (/prod) y el request path
+      # se reenvia tal cual al backend (GET /api/pedidos -> BFF /api/pedidos).
+      # Con un stage con nombre, el prefijo se incluye en el path del backend y
+      # Spring responde "No static resource prod/..." (HTTP 500).
+      StageName: $default
       AutoDeploy: true
 
 Outputs:
   ApiEndpoint:
     Description: Endpoint del API Manager (usar como PEDIDOS_API_URL en el BFF / bffUrl en el SPA)
-    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod'
+    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com'
   ApiId:
     Description: ID del API Manager
     Value: !Ref Api
