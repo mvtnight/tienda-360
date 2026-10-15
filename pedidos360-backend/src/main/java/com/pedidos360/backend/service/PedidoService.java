@@ -2,6 +2,8 @@ package com.pedidos360.backend.service;
 
 import com.pedidos360.backend.dto.PedidoRequest;
 import com.pedidos360.backend.dto.PedidoResponse;
+import com.pedidos360.backend.messaging.EventoPublisher;
+import com.pedidos360.backend.messaging.PedidoEvento;
 import com.pedidos360.backend.model.EstadoPedido;
 import com.pedidos360.backend.model.Pedido;
 import com.pedidos360.backend.repository.PedidoRepository;
@@ -14,9 +16,11 @@ import java.util.List;
 public class PedidoService {
 
     private final PedidoRepository repository;
+    private final EventoPublisher publisher;
 
-    public PedidoService(PedidoRepository repository) {
+    public PedidoService(PedidoRepository repository, EventoPublisher publisher) {
         this.repository = repository;
+        this.publisher = publisher;
     }
 
     @Transactional(readOnly = true)
@@ -37,7 +41,11 @@ public class PedidoService {
         pedido.setItems(List.copyOf(request.items()));
         pedido.setTotal(request.total());
         pedido.setCreador(creador);
-        return toResponse(repository.save(pedido));
+        PedidoResponse response = toResponse(repository.save(pedido));
+        publisher.notificar(PedidoEvento.de("pedido.creado", response.id(), response.cliente(),
+                response.email(), response.estado().name(), response.total(),
+                "Pedido creado con " + response.items().size() + " item(s)"));
+        return response;
     }
 
     @Transactional
@@ -46,6 +54,12 @@ public class PedidoService {
             if (pedido.getEstado() != EstadoPedido.CANCELADO) {
                 pedido.setEstado(EstadoPedido.CANCELADO);
                 repository.save(pedido);
+                publisher.notificar(PedidoEvento.de("pedido.cancelado", pedido.getId(), pedido.getCliente(),
+                        pedido.getEmail(), pedido.getEstado().name(), pedido.getTotal(),
+                        "Pedido cancelado por el administrador"));
+                publisher.ticket("cancelacion", PedidoEvento.de("ticket.abierto", pedido.getId(),
+                        pedido.getCliente(), pedido.getEmail(), pedido.getEstado().name(), pedido.getTotal(),
+                        "Ticket automatico: pedido cancelado"));
             }
             return true;
         }).orElse(false);
@@ -56,6 +70,9 @@ public class PedidoService {
         return repository.findById(id).map(pedido -> {
             pedido.setEstado(estado);
             repository.save(pedido);
+            publisher.notificar(PedidoEvento.de("pedido.estado", pedido.getId(), pedido.getCliente(),
+                    pedido.getEmail(), pedido.getEstado().name(), pedido.getTotal(),
+                    "Estado actualizado a " + pedido.getEstado().name()));
             return true;
         }).orElse(false);
     }
