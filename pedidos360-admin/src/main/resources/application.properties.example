@@ -1,0 +1,18 @@
+# ============================================================
+# pedidos360-admin - Microservicio administrador de mensajeria
+# Requiere las mismas env vars de Azure AD que backend/BFF.
+# ============================================================
+spring.application.name=pedidos360-admin
+server.port=8091
+
+azure.tenant-id=${AZURE_TENANT_ID:00000000-0000-0000-0000-000000000000}
+app.exposed-client-id=${AZURE_EXPOSED_APP_CLIENT_ID:00000000-0000-0000-0000-000000000000}
+app.exposed-app-uri=${AZURE_EXPOSED_APP_URI:api://00000000-0000-0000-0000-000000000000}
+
+# API de gestion de RabbitMQ (plugin rabbitmq_management)
+app.rabbitmq.mgmt-url=${RABBITMQ_MGMT_URL:http://localhost:15672}
+app.rabbitmq.user=${RABBITMQ_USER:admin}
+app.rabbitmq.pass=${RABBITMQ_PASS:admin}
+app.rabbitmq.vhost=${RABBITMQ_VHOST:/}
+
+app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS:http://localhost:4200}
