@@ -106,16 +106,16 @@ function tokenShort(token: string): string {
   styles: [
     `
       .card {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 1px 3px rgba(13, 43, 69, 0.08);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: var(--pad);
+        margin-bottom: var(--gap);
+        box-shadow: var(--shadow-sm);
       }
       .card h3 {
         margin-top: 0;
-        color: #123a56;
+        color: var(--brand-800);
       }
       .claim,
       .row {
@@ -127,7 +127,7 @@ function tokenShort(token: string): string {
       }
       .claim-name {
         font-weight: 600;
-        color: #123a56;
+        color: var(--brand-800);
       }
       .claim-value {
         color: #334155;
@@ -141,13 +141,21 @@ function tokenShort(token: string): string {
         margin-top: 16px;
       }
       .btn {
-        background: #0e7fb8;
+        background: linear-gradient(120deg, var(--brand-600), var(--brand-500));
         color: #fff;
         border: none;
-        border-radius: 6px;
-        padding: 8px 14px;
+        border-radius: var(--radius-sm);
+        padding: 10px 16px;
         cursor: pointer;
         font: inherit;
+        font-weight: 600;
+        transition: filter 0.15s ease, transform 0.05s ease;
+      }
+      .btn:hover {
+        filter: brightness(1.06);
+      }
+      .btn:active {
+        transform: translateY(1px);
       }
       .btn:disabled {
         opacity: 0.55;
@@ -156,15 +164,16 @@ function tokenShort(token: string): string {
       .hint {
         margin-top: 12px;
         font-size: 0.8rem;
+        color: var(--muted);
       }
       .hint.ok {
-        color: #14532d;
+        color: var(--ok);
       }
       .hint.error {
-        color: #8f1d1d;
+        color: var(--danger);
       }
       .vencido {
-        color: #c62828;
+        color: var(--danger);
         font-weight: 700;
       }
       .mono {
@@ -173,14 +182,14 @@ function tokenShort(token: string): string {
         background: #0f172a;
         color: #e2e8f0;
         padding: 8px 12px;
-        border-radius: 6px;
+        border-radius: var(--radius-sm);
         margin: 6px 0;
         overflow-wrap: anywhere;
         white-space: normal;
       }
       .diag {
         margin-top: 14px;
-        border-top: 1px dashed #cbd5e1;
+        border-top: 1px dashed var(--border-strong);
         padding-top: 12px;
       }
       .diag-line {
@@ -197,10 +206,10 @@ function tokenShort(token: string): string {
         color: #fff;
       }
       .b-ok {
-        background: #1b7a43;
+        background: var(--ok);
       }
       .b-err {
-        background: #b31b1b;
+        background: var(--danger);
       }
       .diag pre {
         font-family: Consolas, monospace;
@@ -208,10 +217,25 @@ function tokenShort(token: string): string {
         background: #f1f5f9;
         color: #0f172a;
         padding: 10px 12px;
-        border-radius: 6px;
+        border-radius: var(--radius-sm);
         overflow: auto;
         max-height: 260px;
         white-space: pre-wrap;
+      }
+
+      @media (max-width: 640px) {
+        .claim,
+        .row {
+          flex-direction: column;
+          gap: 2px;
+        }
+        .claim-value {
+          text-align: left;
+        }
+        .btn-row .btn {
+          flex: 1 1 100%;
+          min-height: 44px;
+        }
       }
     `
   ]

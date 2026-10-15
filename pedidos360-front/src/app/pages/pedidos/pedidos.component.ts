@@ -86,14 +86,14 @@ import { CreatePedidoRequest, EstadoPedido, Pedido, PedidosService } from '../..
             <tbody>
               @for (p of pedidos; track p.id) {
                 <tr>
-                  <td>{{ p.id }}</td>
-                  <td>{{ p.cliente }}</td>
-                  <td>{{ p.email }}</td>
-                  <td class="items">{{ p.items.join(', ') }}</td>
-                  <td><span class="estado {{ p.estado }}">{{ p.estado }}</span></td>
-                  <td>{{ p.total | currency }}</td>
+                  <td data-label="#">{{ p.id }}</td>
+                  <td data-label="Cliente">{{ p.cliente }}</td>
+                  <td data-label="Email">{{ p.email }}</td>
+                  <td class="items" data-label="Items">{{ p.items.join(', ') }}</td>
+                  <td data-label="Estado"><span class="estado {{ p.estado }}">{{ p.estado }}</span></td>
+                  <td data-label="Total">{{ p.total | currency }}</td>
                   @if (canAdmin) {
-                    <td class="actions">
+                    <td class="actions" data-label="Acciones">
                       <select
                         class="estado-select"
                         [value]="estadoSel(p.id)"
@@ -120,16 +120,16 @@ import { CreatePedidoRequest, EstadoPedido, Pedido, PedidosService } from '../..
   styles: [
     `
       .card {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 1px 3px rgba(13, 43, 69, 0.08);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: var(--pad);
+        margin-bottom: var(--gap);
+        box-shadow: var(--shadow-sm);
       }
       .card h3 {
         margin-top: 0;
-        color: #123a56;
+        color: var(--brand-800);
       }
       .grid-2 {
         display: grid;
@@ -147,11 +147,12 @@ import { CreatePedidoRequest, EstadoPedido, Pedido, PedidosService } from '../..
       select {
         width: 100%;
         margin-top: 4px;
-        padding: 8px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
+        padding: 10px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
         box-sizing: border-box;
         font: inherit;
+        background: #fff;
       }
       textarea {
         resize: vertical;
@@ -159,24 +160,32 @@ import { CreatePedidoRequest, EstadoPedido, Pedido, PedidosService } from '../..
       input:focus,
       textarea:focus,
       select:focus {
-        outline: 2px solid #4cc2ff;
-        border-color: #0e7fb8;
+        outline: 2px solid var(--accent);
+        border-color: var(--brand-600);
       }
       .btn {
-        background: #0e7fb8;
+        background: linear-gradient(120deg, var(--brand-600), var(--brand-500));
         color: #fff;
         border: none;
-        border-radius: 6px;
-        padding: 8px 14px;
+        border-radius: var(--radius-sm);
+        padding: 10px 16px;
         cursor: pointer;
         font: inherit;
+        font-weight: 600;
+        transition: filter 0.15s ease, transform 0.05s ease;
+      }
+      .btn:hover {
+        filter: brightness(1.06);
+      }
+      .btn:active {
+        transform: translateY(1px);
       }
       .btn.danger {
-        background: #c62828;
+        background: linear-gradient(120deg, #c62828, #e53935);
       }
       .btn.link {
         background: transparent;
-        color: #0e7fb8;
+        color: var(--brand-600);
         padding: 0 8px;
         text-decoration: underline;
       }
@@ -222,35 +231,126 @@ import { CreatePedidoRequest, EstadoPedido, Pedido, PedidosService } from '../..
       .estado {
         display: inline-block;
         border-radius: 999px;
-        padding: 2px 10px;
+        padding: 3px 12px;
         font-size: 0.72rem;
         font-weight: 700;
         background: #eef2f7;
         color: #334155;
+        border: 1px solid transparent;
+      }
+      .estado.RECIBIDO {
+        background: #e0f2fe;
+        color: #075985;
+        border-color: #bae6fd;
+      }
+      .estado.EN_PREPARACION {
+        background: var(--warn-bg);
+        color: var(--warn);
+        border-color: #fde68a;
+      }
+      .estado.ENVIADO {
+        background: #e0e7ff;
+        color: #3730a3;
+        border-color: #c7d2fe;
+      }
+      .estado.ENTREGADO {
+        background: var(--ok-bg);
+        color: var(--ok);
+        border-color: var(--ok-border);
+      }
+      .estado.CANCELADO {
+        background: var(--danger-bg);
+        color: var(--danger);
+        border-color: var(--danger-border);
       }
       .banner {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 10px 14px;
-        border-radius: 8px;
-        margin-bottom: 14px;
+        gap: 12px;
+        padding: 12px 16px;
+        border-radius: var(--radius-sm);
+        margin-bottom: var(--gap);
         font-weight: 600;
       }
       .banner.error {
         color: #8f1d1d;
-        background: #ffe9ed;
-        border: 1px solid #f5c6cb;
+        background: var(--danger-bg);
+        border: 1px solid var(--danger-border);
       }
       .banner.ok {
         color: #14532d;
-        background: #dff5e4;
-        border: 1px solid #a7d7b1;
+        background: var(--ok-bg);
+        border: 1px solid var(--ok-border);
       }
       .hint {
-        color: #64748b;
+        color: var(--muted);
         font-size: 0.8rem;
         margin-top: 10px;
+      }
+
+      /* Móvil: el grid del formulario pasa a una columna y la tabla a tarjetas */
+      @media (max-width: 640px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+        .table-wrap {
+          overflow-x: visible;
+        }
+        table,
+        thead,
+        tbody,
+        tr,
+        td {
+          display: block;
+          width: 100%;
+        }
+        thead {
+          display: none;
+        }
+        tbody tr {
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 10px 12px;
+          margin-bottom: 12px;
+          box-shadow: var(--shadow-sm);
+        }
+        td {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 14px;
+          padding: 6px 0;
+          border-bottom: 1px dashed #eef2f7;
+          text-align: right;
+        }
+        td:last-child {
+          border-bottom: none;
+        }
+        td::before {
+          content: attr(data-label);
+          font-weight: 700;
+          color: var(--muted);
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+          text-align: left;
+        }
+        .items {
+          max-width: none;
+        }
+        .actions {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          white-space: normal;
+        }
+        .estado-select {
+          width: 100%;
+          min-height: 44px;
+        }
+        .actions .btn {
+          min-height: 44px;
+        }
       }
     `
   ]

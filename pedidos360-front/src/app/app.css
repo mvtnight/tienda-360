@@ -1,112 +1,157 @@
 .navbar {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 12px 24px;
-  background: #0d2b45;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 12px clamp(16px, 3vw, 28px);
+  background: linear-gradient(120deg, var(--brand-900), var(--brand-800));
   color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 12px rgba(13, 43, 69, 0.35);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
 }
 
 .navbar .brand {
-  font-weight: 700;
-  font-size: 1.25rem;
+  font-weight: 800;
+  font-size: 1.3rem;
+  letter-spacing: 0.2px;
   color: #fff;
   text-decoration: none;
 }
 
 .navbar .brand span {
-  color: #4cc2ff;
+  color: var(--accent);
 }
 
-.navbar nav {
+.nav-links {
   display: flex;
-  gap: 16px;
+  gap: 6px;
   flex: 1;
 }
 
-.navbar nav a {
+.nav-links a {
   color: #cfd8e3;
   text-decoration: none;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.navbar nav a.active,
-.navbar nav a:hover {
+.nav-links a.active,
+.nav-links a:hover {
   color: #fff;
-  background: #1a4a6e;
+  background: var(--brand-700);
 }
 
 .user {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .user-name {
   font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .badges {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .badge {
   background: #123a56;
-  color: #9fd7ff;
+  color: var(--accent-soft);
   border: 1px solid #2c6d98;
   border-radius: 999px;
-  padding: 2px 10px;
+  padding: 3px 10px;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .env {
-  background: #2d3748;
-  color: #a0b9d1;
-  border: 1px solid #4a5568;
+  background: rgba(255, 255, 255, 0.08);
+  color: #b9cde0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
-  padding: 2px 10px;
+  padding: 3px 10px;
   font-size: 0.72rem;
   font-weight: 600;
 }
 
 .build-id {
-  opacity: 0.75;
-  margin-left: 5px;
-}
-
-main {
-  padding: 24px;
-  max-width: 1000px;
-  margin: 0 auto;
-}
-
-h2 {
-  color: #0d2b45;
+  opacity: 0.8;
+  margin-left: 4px;
+  color: var(--accent-soft);
 }
 
 .btn {
   background: transparent;
   color: #fff;
-  border: 1px solid #4cc2ff;
-  border-radius: 6px;
-  padding: 8px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 9px 16px;
   cursor: pointer;
   font: inherit;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.btn:hover {
+  background: rgba(76, 194, 255, 0.15);
+}
+
+.btn:active {
+  transform: translateY(1px);
 }
 
 .btn.primary {
-  background: #0e7fb8;
-  border-color: #0e7fb8;
+  background: linear-gradient(120deg, var(--brand-600), var(--brand-500));
+  border-color: transparent;
+}
+
+.btn.primary:hover {
+  background: linear-gradient(120deg, var(--brand-500), var(--brand-600));
 }
 
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Móvil: el nombre, los roles y el ambiente se ocultan; el nav baja a su fila */
+@media (max-width: 720px) {
+  .env {
+    display: none;
+  }
+
+  .brand {
+    font-size: 1.15rem;
+  }
+
+  .nav-links {
+    order: 3;
+    flex-basis: 100%;
+    flex: 1 1 100%;
+  }
+
+  .nav-links a {
+    flex: 1;
+    text-align: center;
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-name {
+    display: none;
+  }
 }
