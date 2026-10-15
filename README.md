@@ -1,8 +1,12 @@
-# Pedidos360 — Etapa 1: IDaaS con Azure AD + API Manager en AWS
+# Pedidos360 — Cloud Native (IDaaS + API Manager + RabbitMQ)
 
-Sistema de pedidos cuyo objetivo de la **etapa 1** es demostrar autenticación y
-autorización de punta a punta con **Azure AD (Entra ID)** y un **API Manager en AWS**
-que valida el mismo token con los mismos criterios que el BFF.
+Sistema de pedidos construido por etapas sobre AWS + Azure AD:
+
+- **Etapa 1:** autenticación/autorización de punta a punta con **Azure AD (Entra ID)**
+  y un **API Manager en AWS** que valida el mismo token con los mismos criterios que el BFF.
+- **Etapa 3 (EP3/EP4):** **mensajería asíncrona con RabbitMQ** (clúster de 2 nodos,
+  3 colas + DLQ, exchanges direct/topic, ACK manual) y un **microservicio administrador**
+  que crea/elimina colas, exchanges y bindings vía `AmqpAdmin`.
 
 ```
 ┌────────────┐  (1) login (Authorization Code + PKCE)  ┌────────────────────┐
@@ -33,9 +37,36 @@ que valida el mismo token con los mismos criterios que el BFF.
 |---|---|---|
 | `pedidos360-front/` | 4200 | SPA Angular + MSAL v5. Login/logout, guards, interceptor (Bearer), claims/roles en Dashboard, botón "Copiar access_token". |
 | `pedidos360-bff/` | 8085 | BFF. Valida el JWT (JWKS + iss + aud + exp/nbf) y reenvía el mismo Bearer al API Manager. |
-| `pedidos360-backend/` | 8090 | Resource server. CRUD de pedidos con RBAC (PEDIDOS_ADMIN / PEDIDOS_VENDEDOR). `/health` público. |
-| `infra/` | - | CloudFormation (ALB+ASG+EC2 y API Gateway HTTP API), `deploy.ps1`, user-data. |
-| `docs/` | - | Evidencias y guías: `presentacion-EP2.md`, `api-manager-aws-consola.md`, `GUIA-DEFENSA.txt`. |
+| `pedidos360-backend/` | 8090 | Resource server. CRUD de pedidos con RBAC (PEDIDOS_ADMIN / PEDIDOS_VENDEDOR). Productor y consumidores RabbitMQ (`@RabbitListener`, ACK manual, DLQ). `/health` público. |
+| `pedidos360-admin/` | 8091 | Microservicio administrador de RabbitMQ. REST para crear/eliminar colas, exchanges y bindings (`AmqpAdmin`) y consultar/purgar colas, ver mensajes y publicar eventos. Requiere rol `PEDIDOS_ADMIN`. |
+| `infra/` | - | CloudFormation (ALB+ASG+EC2, RabbitMQ EC2 y API Gateway HTTP API), `deploy.ps1`, `rabbitmq-cluster.ps1`, user-data. |
+| `docs/` | - | Evidencias y guías: `rubrica-ep3-ep4-dsy1107.md`, `guion-EP4-pedidos360.md`, `presentacion-EP2.md`, `api-manager-aws-consola.md`, `GUIA-DEFENSA.txt`. |
+
+## Mensajería con RabbitMQ (Etapa 3)
+
+```
+ Backend :8090 (PedidoService)                      RabbitMQ (clúster 2 nodos)
+ ┌──────────────────┐   pedido.notificacion (Direct)  ┌───────────────────────────┐
+ │ EventoPublisher  │ ───────────────────────────────▶│ exchange: pedido.notificacion
+ └──────────────────┘                                 │           pedido.documento (topic)
+                                                      │           ticket (topic)          │
+ ┌──────────────────┐  @RabbitListener (ACK manual)   │ + DLX .dlx por dominio            │
+ │ Notificacion     │◀── notificaciones.pedidos ──────│                                   │
+ │ Documento        │◀── documentos.pedidos ──────────│  3 colas + 3 DLQ                  │
+ │ Ticket           │◀── tickets.pedidos ─────────────└───────────────────────────────────┘
+ └──────────────────┘   fallo → 3 reintentos → NACK → *.dlq
+```
+
+- **Colas (3)**: `notificaciones.pedidos`, `documentos.pedidos`, `tickets.pedidos`,
+  cada una con su DLQ (`*.dlq`) y su exchange (Direct `pedido.notificacion`;
+  Topic `pedido.documento` con `pedido.documento.*`; Topic `ticket` con `ticket.*`).
+- **Cadena de eventos**: *crear pedido* → notificación → documento generado → ticket
+  (si el total ≥ 1000); *cancelar* → notificación + ticket de cancelación;
+  *cambiar estado* → evento de estado.
+- **Robustez**: `EventoPublisher` es fail-safe (no rompe el flujo HTTP si RabbitMQ cae);
+  consumidores con `acknowledge-mode=manual`, `prefetch=1`; 3 reintentos y luego
+  `basicNack(requeue=false)` → DLQ (marcar `FORZAR_DLQ` en el detalle fuerza el fallo).
+- **Nombres centralizados** en `RabbitConfig` (clase de constantes única).
 
 ## Despliegue en AWS (REAL y en producción)
 
@@ -85,15 +116,42 @@ powershell -ExecutionPolicy Bypass -File infra\scripts\deploy.ps1
 ## Puesta en marcha (local)
 
 ```bash
+# 0) RabbitMQ → clúster local de 2 nodos (5672/5673; UI 15672/15673, admin/admin)
+powershell -ExecutionPolicy Bypass -File infra\scripts\rabbitmq-cluster.ps1 up
 # 1) backend  → :8090
 cd pedidos360-backend && mvnw.cmd package && java -jar target\pedidos360-backend.jar
 # 2) bff      → :8085  (opcional: apuntar al API Manager de AWS)
 cd pedidos360-bff && mvnw.cmd package && java -jar target\pedidos360-bff-0.0.1-SNAPSHOT.jar
 #    con el API Manager de AWS:
 set PEDIDOS_API_URL=https://pyb1wkfvcg.execute-api.us-east-2.amazonaws.com
-# 3) frontend → :4200
+# 3) admin    → :8091  (microservicio administrador de RabbitMQ)
+cd pedidos360-admin && ..\pedidos360-backend\mvnw.cmd package && java -jar target\pedidos360-admin.jar
+# 4) frontend → :4200
 cd pedidos360-front && npm start
 ```
+
+Atajo: `powershell -ExecutionPolicy Bypass -File infra\scripts\restart-services.ps1 -Start`
+levanta RabbitMQ, backend, BFF, admin y SPA y verifica los puertos.
+
+## Microservicio administrador de RabbitMQ (:8091)
+
+| Endpoint | Método | Descripción | Rol |
+|---|---|---|---|
+| `/health` | GET | Estado del servicio | Público |
+| `/admin/queues` | GET | Lista colas (mensajes, consumidores, estado) | PEDIDOS_ADMIN |
+| `/admin/queues` | POST | Crea (declara) una cola | PEDIDOS_ADMIN |
+| `/admin/queues/{nombre}` | DELETE | Elimina una cola | PEDIDOS_ADMIN |
+| `/admin/exchanges` | POST | Crea un exchange (direct/topic/fanout/headers) | PEDIDOS_ADMIN |
+| `/admin/exchanges/{nombre}` | DELETE | Elimina un exchange | PEDIDOS_ADMIN |
+| `/admin/bindings` | POST | Vincula cola↔exchange con routing key | PEDIDOS_ADMIN |
+| `/admin/bindings` | DELETE | Desvincula cola↔exchange | PEDIDOS_ADMIN |
+| `/admin/dlq` | GET | Lista solo las DLQ | PEDIDOS_ADMIN |
+| `/admin/queues/{nombre}/messages` | GET | Espía mensajes (sin consumir) | PEDIDOS_ADMIN |
+| `/admin/queues/{nombre}/messages` | DELETE | Purga una cola | PEDIDOS_ADMIN |
+| `/admin/eventos` | POST | Publica un evento en un dominio | PEDIDOS_ADMIN |
+
+La creación/eliminación de topología se encapsula en `RabbitAdminService` (`AmqpAdmin`);
+entradas validadas con DTO (`ColaRequest`, `ExchangeRequest`, `BindingRequest`).
 
 Abrir **http://localhost:4200**, login con `maria@` o `jose@` (clave entregada),
 ver Dashboard (claims/roles + botón copiar token) y Pedidos.
@@ -123,4 +181,6 @@ de la rúbrica EP1 y EP2 y los comandos de demo). Capturas pendientes marcadas c
 ```bash
 cd pedidos360-backend && mvnw.cmd test   # 6 tests (401/403/roles/CRUD)
 cd pedidos360-bff && mvnw.cmd test       # 5 tests (forward + 401)
+# admin (integración, requiere RabbitMQ local en :5672/:15672):
+cd pedidos360-admin && ..\pedidos360-backend\mvnw.cmd -Dtest=AdminControllerIT test  # 12 tests
 ```

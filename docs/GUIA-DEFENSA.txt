@@ -299,3 +299,60 @@ R: Se PUEDE y se usa (renovar-tokens.ps1). Como la app API no fija version de
 [ ] Capturas EP2: rutas consola AWS, CORS, tenant, apps, PKCE, curls 200/401/403
 [ ] Pegar cada captura en docs\presentacion-EP2.md
 [ ] Commit + push del repo y entregar links en AVA
+
+------------------------------------------------------------------------------
+13. ETAPA 3 (EP3 encargo 12% / EP4 presentacion 18%) - RABBITMQ + ADMIN
+------------------------------------------------------------------------------
+
+RESUMEN: se agrego mensajeria asincrona con RabbitMQ (cluster de 2 nodos,
+3 colas + 3 DLQ, exchanges direct y topic, ACK manual con reintentos) y un
+microservicio administrador REST (:8091) que crea/elimina colas, exchanges y
+bindings via AmqpAdmin. El front y el backend previos siguen funcionando igual.
+
+INDICADORES EP3 (rubrica) y donde se cumple:
+  1) Nombres centralizados ........ RabbitConfig.java (clase de constantes unica).
+  2) Beans Queue/Exchange/Binding . RabbitConfig (3 dominios + 3 DLX + bindings).
+  3) Separacion negocio/config .... config/ (topologia) vs messaging/ (listeners).
+  4) @RabbitListener por dominio .. messaging/NotificacionListener, DocumentoListener, TicketListener.
+  5) ACK manual + NACK + DLQ ...... AbstractEventoListener (ACK, 3 reintentos, NACK->DLQ);
+                                    application.properties acknowledge-mode=manual, prefetch=1.
+  6) API REST admin ............... pedidos360-admin AdminController (POST/DELETE /admin/queues,
+                                    /admin/exchanges, /admin/bindings + GET/purge/publicar).
+  7) Encapsulacion en servicio .... RabbitAdminService (AmqpAdmin) para topologia;
+                                    MensajeriaQueryService para consultas (API de gestion).
+  8) Validacion con DTO ........... ColaRequest/ExchangeRequest/BindingRequest/PublicarEventoRequest
+                                    con @NotBlank/@Size/@Pattern -> HTTP 400 con detalle por campo.
+
+TOPOLOGIA (nombres exactos):
+  notificaciones: exchange pedido.notificacion (direct)  -> cola notificaciones.pedidos -> DLQ notificaciones.pedidos.dlq
+  documentos    : exchange pedido.documento (topic) rk pedido.documento.* -> cola documentos.pedidos -> DLQ documentos.pedidos.dlq
+  tickets       : exchange ticket (topic) rk ticket.*  -> cola tickets.pedidos -> DLQ tickets.pedidos.dlq
+
+COMANDOS DE DEMO:
+  # cluster local (2 nodos)
+  powershell -ExecutionPolicy Bypass -File infra\scripts\rabbitmq-cluster.ps1 up
+  powershell -ExecutionPolicy Bypass -File infra\scripts\rabbitmq-cluster.ps1 status
+  # evidencias de mensajeria (cluster, colas, exchanges, publicaciones, DLQ)
+  powershell -ExecutionPolicy Bypass -File infra\scripts\evidencias-mensajeria.ps1
+  # levantar todo (RabbitMQ + backend + bff + admin + spa)
+  powershell -ExecutionPolicy Bypass -File infra\scripts\restart-services.ps1 -Start
+  # tests del admin (12, requiere RabbitMQ local)
+  cd pedidos360-admin && ..\pedidos360-backend\mvnw.cmd -Dtest=AdminControllerIT test
+  # deck de evidencias (EP2+EP3+EP4)
+  python infra\scripts\evidencias-pptx.py --json docs\evidencias\resumen.json
+       --mq docs\evidencias\mq\resumen.json
+
+CHECKLIST EP4 (demo de presentacion, 5-10 min):
+  [ ] API Manager en la nube (rutas + JWT authorizer)
+  [ ] Frontend consume via API Manager
+  [ ] JWT valida/rechaza (200 vs 401)
+  [ ] Tenant IDaaS + usuarios (maria, jose)
+  [ ] Login OAuth2/OIDC en el front -> JWT
+  [ ] Backend + frontend desplegados (EC2 + CloudFront)
+  [ ] Dos nodos RabbitMQ en cluster
+  [ ] Tres colas + DLQ
+  [ ] Exchanges direct y topic
+  [ ] docker compose levantando RabbitMQ (rabbitmq-ec2.yaml)
+
+Guion completo: docs\guion-EP4-pedidos360.md
+Rubrica: docs\rubrica-ep3-ep4-dsy1107.md

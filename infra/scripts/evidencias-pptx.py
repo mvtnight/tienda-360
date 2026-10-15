@@ -344,6 +344,181 @@ def slide_compliance(prs):
         size=12, color=C_GRAY)
 
 
+def slide_mq_arch(prs, mq):
+    s = blank(prs)
+    bar(s, "Etapa 3 · Mensajeria RabbitMQ — arquitectura (EP3/EP4)")
+    box(s, 0.55, 1.2, 12.2, 0.4,
+        "PedidoService (publisher fail-safe) → exchanges → colas → @RabbitListener (ACK manual) → DLQ",
+        size=15, bold=True, color=C_TITLE)
+    doms = [
+        ("Notificaciones", "Direct", "pedido.notificacion", "pedido.notificacion",
+         "notificaciones.pedidos", "notificaciones.pedidos.dlq"),
+        ("Documentos", "Topic", "pedido.documento", "pedido.documento.*",
+         "documentos.pedidos", "documentos.pedidos.dlq"),
+        ("Tickets", "Topic", "ticket", "ticket.*",
+         "tickets.pedidos", "tickets.pedidos.dlq"),
+    ]
+    x0, y0, cw = 0.55, 1.8, 4.05
+    for i, (dom, tipo, exch, rk, cola, dlq) in enumerate(doms):
+        x = x0 + i * (cw + 0.1)
+        card = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, In(x), In(y0), In(cw), In(3.4))
+        card.adjustments[0] = 0.05
+        card.fill.solid()
+        card.fill.fore_color.rgb = C_LIGHT
+        card.line.color.rgb = C_TITLE
+        card.line.width = Pt(1.2)
+        badge(s, x + 0.15, y0 + 0.15, cw - 0.3, 0.42, dom, fill=C_TITLE, size=14)
+        lines = [
+            ("Exchange", f"{exch}  ({tipo})"),
+            ("Routing key", rk),
+            ("Cola", cola),
+            ("DLQ", dlq),
+        ]
+        yy = y0 + 0.75
+        for label, val in lines:
+            box(s, x + 0.18, yy, cw - 0.36, 0.25, label, size=10, bold=True, color=C_GRAY)
+            box(s, x + 0.18, yy + 0.22, cw - 0.36, 0.4, val, size=10, font="Consolas", color=C_DARK)
+            yy += 0.66
+    box(s, 0.55, 5.35, 12.2, 1.5,
+        "Cadena: crear pedido → notificacion → documento generado → (total>=1000) ticket abierto.  "
+        "cancelar → notificacion + ticket de cancelacion.  cambiarEstado → evento de estado.\n"
+        "Robustez: ACK manual + prefetch=1; hasta 3 reintentos (sleep); luego basicNack(requeue=false) → DLQ.  "
+        "EventoPublisher no rompe el flujo HTTP si RabbitMQ cae (fail-safe).",
+        size=11, color=C_DARK)
+
+
+def slide_mq_evidence(prs, mq, img_map):
+    s = blank(prs)
+    bar(s, "Etapa 3 · Evidencia del cluster, colas y exchanges (EP4)")
+    cluster = mq.get("clusterName", "-")
+    ver = mq.get("rabbitmqVersion", "-")
+    box(s, 0.55, 1.15, 12.2, 0.35,
+        f"Cluster: {cluster}  ·  RabbitMQ {ver}", size=13, bold=True, color=C_TITLE, font="Consolas")
+    nodos = mq.get("nodos", [])
+    box(s, 0.55, 1.62, 6.0, 0.3, "Nodos (cluster)", size=12, bold=True)
+    yy = 1.95
+    for n in nodos:
+        badge(s, 0.6, yy, 5.9, 0.4, f"{n.get('name','')}  running={n.get('running','')}  ({n.get('tipo','')})",
+              fill=C_GREEN if n.get("running") else C_RED, size=10)
+        yy += 0.46
+    exs = mq.get("exchanges", [])
+    box(s, 6.75, 1.62, 6.0, 0.3, "Exchanges", size=12, bold=True)
+    yy = 1.95
+    for e in exs:
+        fill = C_TITLE if e.get("type") in ("direct", "topic") else C_GRAY
+        badge(s, 6.8, yy, 5.9, 0.4, f"{e.get('name','')}  [{e.get('type','')}]", fill=fill, size=10)
+        yy += 0.46
+    colas = mq.get("colas", [])
+    box(s, 0.55, 3.55, 12.2, 0.3, "Colas (3 + 3 DLQ)", size=12, bold=True)
+    cx, cy, cw, ch, gap = 0.55, 3.9, 4.0, 0.9, 0.1
+    for i, q in enumerate(colas[:6]):
+        col = i % 3
+        row = i // 3
+        x = cx + col * (cw + gap)
+        y = cy + row * (ch + 0.12)
+        is_dlq = q.get("dlq") or str(q.get("name", "")).endswith(".dlq")
+        card = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, In(x), In(y), In(cw), In(ch))
+        card.adjustments[0] = 0.08
+        card.fill.solid()
+        card.fill.fore_color.rgb = C_LIGHT
+        card.line.color.rgb = C_AMBER if is_dlq else C_GREEN
+        card.line.width = Pt(1.3)
+        box(s, x + 0.12, y + 0.08, cw - 0.24, 0.32, q.get("name", ""), size=11, bold=True, font="Consolas")
+        box(s, x + 0.12, y + 0.42, cw - 0.24, 0.4,
+            f"msgs={q.get('messages', 0)} ready={q.get('ready', 0)} consumers={q.get('consumers', 0)}",
+            size=9, color=C_GRAY, font="Consolas")
+    img = img_map.get("mq_queues") or img_map.get("mq_cluster")
+    if img:
+        s.shapes.add_picture(img, In(0.6), In(5.95), width=In(12.1))
+    else:
+        box(s, 0.55, 5.9, 12.2, 1.0,
+            "[Captura pendiente: UI RabbitMQ → Queues + Nodes + docker compose ps]",
+            size=12, color=C_GRAY, align=PP_ALIGN.CENTER)
+
+
+def slide_admin(prs, img_map):
+    s = blank(prs)
+    bar(s, "Etapa 3 · Microservicio admin RabbitMQ :8091 (EP3: 13% + 10% + 7%)")
+    box(s, 0.55, 1.15, 12.2, 0.35,
+        "RabbitAdminService (AmqpAdmin) encapsula la topologia; DTO con Bean Validation; rol PEDIDOS_ADMIN",
+        size=12, bold=True, color=C_TITLE)
+    rows = [
+        ("POST", "/admin/queues", "crea cola (DTO ColaRequest)", C_GREEN),
+        ("DELETE", "/admin/queues/{nombre}", "elimina cola", C_AMBER),
+        ("POST", "/admin/exchanges", "crea exchange direct/topic/fanout/headers", C_GREEN),
+        ("DELETE", "/admin/exchanges/{nombre}", "elimina exchange", C_AMBER),
+        ("POST", "/admin/bindings", "vincula cola↔exchange (routing key)", C_GREEN),
+        ("DELETE", "/admin/bindings", "desvincula cola↔exchange", C_AMBER),
+        ("GET", "/admin/queues", "lista colas (mensajes/consumidores)", C_DARK),
+        ("GET", "/admin/dlq", "lista DLQ", C_DARK),
+        ("GET", "/admin/queues/{n}/messages", "espiar mensajes", C_DARK),
+        ("DELETE", "/admin/queues/{n}/messages", "purgar cola", C_AMBER),
+        ("POST", "/admin/eventos", "publicar evento de prueba", C_TITLE),
+    ]
+    y = 1.6
+    for method, path, desc, color in rows:
+        badge(s, 0.6, y, 1.25, 0.36, method, fill=color, size=10)
+        box(s, 2.0, y + 0.02, 5.4, 0.34, path, size=11, font="Consolas")
+        box(s, 7.5, y + 0.02, 5.3, 0.34, desc, size=10, color=C_GRAY)
+        y += 0.42
+    box(s, 0.6, y + 0.08, 12.1, 0.4,
+        "Validacion: nombre vacio/corto/caracteres invalidos o type distinto de direct|topic|fanout|headers → HTTP 400 con detalle por campo.",
+        size=11, color=C_DARK)
+    img = img_map.get("admin")
+    if img:
+        s.shapes.add_picture(img, In(0.6), In(y + 0.55), width=In(12.1))
+
+
+def slide_compliance_ep3(prs):
+    s = blank(prs)
+    bar(s, "Indicadores EP3 — cumplimiento (100%)")
+    rows = [
+        ("1", "Nombres centralizados (clase @Configuration)", "12%"),
+        ("2", "Beans Queue/Exchange/Binding por caso de uso", "13%"),
+        ("3", "Separacion negocio / config de mensajeria", "10%"),
+        ("4", "@RabbitListener agrupados por dominio", "15%"),
+        ("5", "ACK manual + NACK + DLQ", "20%"),
+        ("6", "API REST admin (POST/DELETE queues, exchanges, bindings)", "13%"),
+        ("7", "Encapsulacion en RabbitAdminService", "10%"),
+        ("8", "Validacion de entrada con DTO", "7%"),
+    ]
+    y = 1.4
+    total = 0
+    for num, name, pct in rows:
+        box(s, 0.8, y, 0.7, 0.5, num, size=15, bold=True, color=C_TITLE, align=PP_ALIGN.CENTER)
+        box(s, 1.7, y, 8.6, 0.5, name, size=13)
+        badge(s, 10.5, y + 0.04, 1.4, 0.42, pct, fill=C_GREEN, size=12)
+        total += int(pct.replace("%", ""))
+        y += 0.54
+    badge(s, 10.5, y + 0.02, 1.4, 0.42, f"{total}%", fill=C_DARK, size=12)
+    box(s, 1.7, y + 0.04, 8.6, 0.5, "TOTAL", size=13, bold=True)
+
+
+def slide_compliance_ep4(prs, d):
+    s = blank(prs)
+    bar(s, "Checklist de demostracion EP4 (presentacion 5–10 min)")
+    items = [
+        "API Manager en la nube en funcionamiento (rutas + JWT authorizer).",
+        "El frontend consume los endpoints via el API Manager.",
+        "El API Manager valida JWT: rechaza invalido (401), acepta valido (200).",
+        "Tenant en IDaaS + usuarios registrados (maria, jose).",
+        "Frontend usa OAuth 2.0 / OIDC para login y obtener JWT.",
+        "Backend y frontend desplegados, activos e integrados (EC2 + CloudFront).",
+        "Dos nodos RabbitMQ en cluster.",
+        "Tres colas con sus DLQ funcionando.",
+        "Exchanges direct y topic configurados.",
+        "docker-compose levantando servicios de RabbitMQ.",
+    ]
+    y = 1.3
+    for it in items:
+        badge(s, 0.7, y, 0.5, 0.42, "OK", fill=C_GREEN, size=11)
+        box(s, 1.4, y + 0.02, 11.4, 0.4, it, size=12)
+        y += 0.5
+    box(s, 0.7, y + 0.1, 11.6, 0.4,
+        "Mensajeria en vivo: crear pedido → cadena notificacion/documento/ticket; demo DLQ con FORZAR_DLQ.",
+        size=12, bold=True, color=C_TITLE)
+
+
 def mapping_images(imgdir):
     result = {}
     if not imgdir or not os.path.isdir(imgdir):
@@ -372,11 +547,48 @@ def mapping_images(imgdir):
             "network": "headers",
             "bearer": "headers",
             "interceptor": "headers",
+            "cluster": "mq_cluster",
+            "node": "mq_cluster",
+            "compose": "mq_cluster",
+            "docker": "mq_cluster",
+            "queue": "mq_queues",
+            "cola": "mq_queues",
+            "exchange": "mq_exchanges",
+            "admin": "admin",
+            "dlq": "mq_queues",
         }
         for key, slot in mapping.items():
             if key in low and slot not in result:
                 result[slot] = path
     return result
+
+
+def demo_mq_data():
+    return {
+        "clusterName": "rabbit@rabbitmq-node1",
+        "rabbitmqVersion": "3.13.7",
+        "nodos": [
+            {"name": "rabbit@rabbitmq-node1", "running": True, "tipo": "disc"},
+            {"name": "rabbit@rabbitmq-node2", "running": True, "tipo": "disc"},
+        ],
+        "colas": [
+            {"name": "notificaciones.pedidos", "messages": 0, "ready": 0, "consumers": 1, "dlq": False},
+            {"name": "documentos.pedidos", "messages": 0, "ready": 0, "consumers": 1, "dlq": False},
+            {"name": "tickets.pedidos", "messages": 0, "ready": 0, "consumers": 1, "dlq": False},
+            {"name": "notificaciones.pedidos.dlq", "messages": 1, "ready": 1, "consumers": 0, "dlq": True},
+            {"name": "documentos.pedidos.dlq", "messages": 0, "ready": 0, "consumers": 0, "dlq": True},
+            {"name": "tickets.pedidos.dlq", "messages": 0, "ready": 0, "consumers": 0, "dlq": True},
+        ],
+        "exchanges": [
+            {"name": "pedido.notificacion", "type": "direct"},
+            {"name": "pedido.documento", "type": "topic"},
+            {"name": "ticket", "type": "topic"},
+            {"name": "pedido.notificacion.dlx", "type": "direct"},
+            {"name": "pedido.documento.dlx", "type": "direct"},
+            {"name": "ticket.dlx", "type": "direct"},
+        ],
+        "dlq": {"cola": "notificaciones.pedidos.dlq", "antes": 0, "despues": 1, "ok": True},
+    }
 
 
 def demo_data():
@@ -409,14 +621,15 @@ def demo_data():
     }
 
 
-def build(prs, d, img_map):
+def build(prs, d, img_map, mq=None):
+    mq = mq or {}
     s = blank(prs)
-    box(s, 0.8, 1.7, 11.7, 1.0, "Pedidos360 — Evidencias EP2", size=48, bold=True, color=C_TITLE, align=PP_ALIGN.CENTER)
-    box(s, 0.8, 2.9, 11.7, 0.5, "DSY1107 · Desarrollo Cloud Native I · presentación individual",
+    box(s, 0.8, 1.7, 11.7, 1.0, "Pedidos360 — Evidencias EP2/EP3/EP4", size=44, bold=True, color=C_TITLE, align=PP_ALIGN.CENTER)
+    box(s, 0.8, 2.9, 11.7, 0.5, "DSY1107 · Desarrollo Cloud Native I · mensajeria RabbitMQ + admin",
         size=16, color=C_GRAY, align=PP_ALIGN.CENTER)
     box(s, 0.8, 3.9, 11.7, 0.9,
-        "SPA Angular + MSAL (PKCE) → API Gateway (JWT) → ALB → EC2 Spring Boot\n"
-        + "Generado: " + d.get("generatedAt", "") + " · evidencia real contra el endpoint prod",
+        "SPA Angular + MSAL (PKCE) → API Gateway (JWT) → ALB → EC2 Spring Boot → RabbitMQ\n"
+        + "Generado: " + d.get("generatedAt", ""),
         size=13, color=C_DARK, align=PP_ALIGN.CENTER)
     slide_env(prs, d)
     slide_routes(prs, d, img_map)
@@ -425,12 +638,18 @@ def build(prs, d, img_map):
     slide_login(prs, d, img_map)
     slide_matrix(prs, d, img_map)
     slide_compliance(prs)
+    slide_mq_arch(prs, mq)
+    slide_mq_evidence(prs, mq, img_map)
+    slide_admin(prs, img_map)
+    slide_compliance_ep3(prs)
+    slide_compliance_ep4(prs, d)
     return prs
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default="docs/evidencias/resumen.json")
+    ap.add_argument("--mq", default="", help="resumen.json de evidencias-mensajeria.ps1")
     ap.add_argument("--img", default="docs/evidencias/img")
     ap.add_argument("--out", default="docs/evidencias/Pedidos360-Evidencias.pptx")
     ap.add_argument("--demo", action="store_true")
@@ -438,11 +657,16 @@ def main():
 
     if args.demo:
         d = demo_data()
+        mq = demo_mq_data()
     else:
         with open(args.json, "r", encoding="utf-8-sig") as fh:
             d = json.load(fh)
+        mq = {}
+        if args.mq and os.path.isfile(args.mq):
+            with open(args.mq, "r", encoding="utf-8-sig") as fh:
+                mq = json.load(fh)
     img_map = mapping_images(args.img)
-    prs = build(new_prs(), d, img_map)
+    prs = build(new_prs(), d, img_map, mq)
     outdir = os.path.dirname(args.out)
     if outdir:
         os.makedirs(outdir, exist_ok=True)

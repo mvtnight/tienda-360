@@ -96,30 +96,67 @@ Resources:
             systemctl enable --now docker
             usermod -aG docker ec2-user
 
-            docker network create rmqnet || true
-            docker rm -f rabbitmq-node1 rabbitmq-node2 || true
+            # Plugin docker compose v2 (Amazon Linux 2023 no lo trae en repos)
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+            chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+            docker compose version
 
-            docker run -d --name rabbitmq-node1 --hostname rabbitmq-node1 --network rmqnet \
-              -p 5672:5672 -p 15672:15672 \
-              -e RABBITMQ_DEFAULT_USER=${RabbitUser} -e RABBITMQ_DEFAULT_PASS=${RabbitPass} \
-              -e RABBITMQ_ERLANG_COOKIE=rabbitmq-erlang-cookie-pedidos360 \
-              -v rmq1-data:/var/lib/rabbitmq \
-              rabbitmq:3.13-management
+            # Cluster de 2 nodos levantado con docker-compose
+            mkdir -p /opt/rabbitmq
+            cat > /opt/rabbitmq/docker-compose.yml <<'YAML'
+            services:
+              rabbitmq-node1:
+                image: rabbitmq:3.13-management
+                hostname: rabbitmq-node1
+                container_name: rabbitmq-node1
+                ports:
+                  - "5672:5672"
+                  - "15672:15672"
+                environment:
+                  RABBITMQ_DEFAULT_USER: ${RabbitUser}
+                  RABBITMQ_DEFAULT_PASS: ${RabbitPass}
+                  RABBITMQ_ERLANG_COOKIE: rabbitmq-erlang-cookie-pedidos360
+                volumes:
+                  - rmq1-data:/var/lib/rabbitmq
+                healthcheck:
+                  test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+                  interval: 10s
+                  timeout: 10s
+                  retries: 12
+              rabbitmq-node2:
+                image: rabbitmq:3.13-management
+                hostname: rabbitmq-node2
+                container_name: rabbitmq-node2
+                ports:
+                  - "5673:5672"
+                  - "15673:15672"
+                environment:
+                  RABBITMQ_DEFAULT_USER: ${RabbitUser}
+                  RABBITMQ_DEFAULT_PASS: ${RabbitPass}
+                  RABBITMQ_ERLANG_COOKIE: rabbitmq-erlang-cookie-pedidos360
+                volumes:
+                  - rmq2-data:/var/lib/rabbitmq
+                depends_on:
+                  rabbitmq-node1:
+                    condition: service_healthy
+            networks:
+              default:
+                name: rmqnet
+            volumes:
+              rmq1-data:
+              rmq2-data:
+            YAML
 
-            sleep 25
+            cd /opt/rabbitmq
+            docker compose up -d
 
-            docker run -d --name rabbitmq-node2 --hostname rabbitmq-node2 --network rmqnet \
-              -p 5673:5672 -p 15673:15672 \
-              -e RABBITMQ_DEFAULT_USER=${RabbitUser} -e RABBITMQ_DEFAULT_PASS=${RabbitPass} \
-              -e RABBITMQ_ERLANG_COOKIE=rabbitmq-erlang-cookie-pedidos360 \
-              -v rmq2-data:/var/lib/rabbitmq \
-              rabbitmq:3.13-management
-
-            sleep 30
-
-            docker exec rabbitmq-node2 rabbitmqctl stop_app || true
-            docker exec rabbitmq-node2 rabbitmqctl join_cluster rabbit@rabbitmq-node1 || true
-            docker exec rabbitmq-node2 rabbitmqctl start_app || true
+            # Une node2 al cluster de node1
+            sleep 20
+            docker compose exec -T rabbitmq-node2 rabbitmqctl stop_app || true
+            docker compose exec -T rabbitmq-node2 rabbitmqctl join_cluster rabbit@rabbitmq-node1 || true
+            docker compose exec -T rabbitmq-node2 rabbitmqctl start_app || true
 
 Outputs:
   RabbitMqPrivateIp:
