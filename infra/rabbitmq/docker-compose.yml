@@ -1,0 +1,63 @@
+services:
+  rabbitmq-node1:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq-node1
+    hostname: rabbitmq-node1
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-erlang-cookie-pedidos360
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rmq1-data:/var/lib/rabbitmq
+    networks:
+      - rmqnet
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    restart: unless-stopped
+
+  rabbitmq-node2:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq-node2
+    hostname: rabbitmq-node2
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_ERLANG_COOKIE: rabbitmq-erlang-cookie-pedidos360
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    volumes:
+      - rmq2-data:/var/lib/rabbitmq
+    networks:
+      - rmqnet
+    depends_on:
+      rabbitmq-node1:
+        condition: service_healthy
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rabbitmq-server &
+        SERVER_PID=$$!
+        echo "[cluster] esperando arranque local..."
+        until rabbitmqctl wait /var/lib/rabbitmq/mnesia/rabbit@rabbitmq-node2.pid --timeout 120 >/dev/null 2>&1; do sleep 2; done
+        echo "[cluster] uniendo a rabbit@rabbitmq-node1..."
+        rabbitmqctl stop_app
+        until rabbitmqctl join_cluster rabbit@rabbitmq-node1; do sleep 3; done
+        rabbitmqctl start_app
+        echo "[cluster] nodo unido. Esperando procesos en segundo plano."
+        wait $$SERVER_PID
+
+networks:
+  rmqnet:
+    driver: bridge
+
+volumes:
+  rmq1-data:
+  rmq2-data:
