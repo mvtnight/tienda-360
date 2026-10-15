@@ -9,6 +9,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -83,5 +84,41 @@ class AdminControllerIT {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detalle.email").exists())
                 .andExpect(jsonPath("$.detalle.total").exists());
+    }
+
+    @Test
+    void creaYEliminaCola() throws Exception {
+        String nombre = "it.cola.prueba";
+        mockMvc.perform(post("/admin/queues")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"queueName\":\"" + nombre + "\",\"durable\":true}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/admin/queues/" + nombre)
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value(nombre));
+
+        mockMvc.perform(delete("/admin/queues/" + nombre)
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void crearColaInvalidaDevuelve400() throws Exception {
+        mockMvc.perform(post("/admin/queues")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"queueName\":\"ab\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detalle.queueName").exists());
+    }
+
+    @Test
+    void eliminarColaInexistenteDevuelve404() throws Exception {
+        mockMvc.perform(delete("/admin/queues/cola.que.no.existe.xyz")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN))))
+                .andExpect(status().isNotFound());
     }
 }
