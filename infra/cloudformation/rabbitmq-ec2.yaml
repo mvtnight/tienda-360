@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Pedidos360 - Broker RabbitMQ en EC2 como cluster de 2 nodos (dos contenedores
+  Docker en la misma instancia, unidos con join_cluster). Expone AMQP (5672) y
+  la consola de gestion (15672). El backend se conecta a la IP privada.
+
+Parameters:
+  EnvName:
+    Type: String
+    Default: dev
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet publica (la instancia necesita salida a Internet para Docker Hub)
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+  InstanceType:
+    Type: String
+    Default: t3.medium
+  AmqpCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR autorizado a AMQP 5672 (produccion - acotar al SG del backend)
+  MgmtCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR autorizado a la consola de gestion 15672
+  RabbitUser:
+    Type: String
+    Default: admin
+  RabbitPass:
+    Type: String
+    Default: admin
+    NoEcho: true
+
+Resources:
+  RabbitMqSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Broker RabbitMQ Pedidos360 (AMQP + consola de gestion)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5672
+          ToPort: 5672
+          CidrIp: !Ref AmqpCidr
+        - IpProtocol: tcp
+          FromPort: 15672
+          ToPort: 15672
+          CidrIp: !Ref MgmtCidr
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  RabbitMqInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref RabbitMqSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub 'pedidos360-rabbitmq-${EnvName}'
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            set -euxo pipefail
+
+            dnf install -y docker
+            systemctl enable --now docker
+            usermod -aG docker ec2-user
+
+            docker network create rmqnet || true
+            docker rm -f rabbitmq-node1 rabbitmq-node2 || true
+
+            docker run -d --name rabbitmq-node1 --hostname rabbitmq-node1 --network rmqnet \
+              -p 5672:5672 -p 15672:15672 \
+              -e RABBITMQ_DEFAULT_USER=${RabbitUser} -e RABBITMQ_DEFAULT_PASS=${RabbitPass} \
+              -e RABBITMQ_ERLANG_COOKIE=rabbitmq-erlang-cookie-pedidos360 \
+              -v rmq1-data:/var/lib/rabbitmq \
+              rabbitmq:3.13-management
+
+            sleep 25
+
+            docker run -d --name rabbitmq-node2 --hostname rabbitmq-node2 --network rmqnet \
+              -p 5673:5672 -p 15673:15672 \
+              -e RABBITMQ_DEFAULT_USER=${RabbitUser} -e RABBITMQ_DEFAULT_PASS=${RabbitPass} \
+              -e RABBITMQ_ERLANG_COOKIE=rabbitmq-erlang-cookie-pedidos360 \
+              -v rmq2-data:/var/lib/rabbitmq \
+              rabbitmq:3.13-management
+
+            sleep 30
+
+            docker exec rabbitmq-node2 rabbitmqctl stop_app || true
+            docker exec rabbitmq-node2 rabbitmqctl join_cluster rabbit@rabbitmq-node1 || true
+            docker exec rabbitmq-node2 rabbitmqctl start_app || true
+
+Outputs:
+  RabbitMqPrivateIp:
+    Description: IP privada del broker (usar como RABBITMQ_HOST del backend)
+    Value: !GetAtt RabbitMqInstance.PrivateIp
+  RabbitMqPublicIp:
+    Description: IP publica de la instancia
+    Value: !GetAtt RabbitMqInstance.PublicIp
+  RabbitMqMgmtUrl:
+    Description: URL de la consola de gestion (admin)
+    Value: !Sub 'http://${RabbitMqInstance.PublicIp}:15672'

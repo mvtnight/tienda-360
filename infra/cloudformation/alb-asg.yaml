@@ -34,6 +34,23 @@ Parameters:
     Type: String
     Default: http://localhost:4200
     Description: "Origen(es) de la SPA habilitados por CORS en el backend (separar varios con coma). Ej: http://localhost:4200,https://xxxx.cloudfront.net"
+  RabbitMqHost:
+    Type: String
+    Default: localhost
+    Description: Host del broker RabbitMQ (IP privada del stack rabbitmq-ec2, o localhost)
+  RabbitMqPort:
+    Type: String
+    Default: '5672'
+  RabbitMqUser:
+    Type: String
+    Default: admin
+  RabbitMqPass:
+    Type: String
+    Default: admin
+    NoEcho: true
+  RabbitMqVhost:
+    Type: String
+    Default: '/'
 
 Resources:
   LoadBalancerSecurityGroup:
@@ -157,6 +174,11 @@ Resources:
               AZURE_EXPOSED_APP_CLIENT_ID=${ApiClientId}
               AZURE_EXPOSED_APP_URI=api://${ApiClientId}
               CORS_ALLOWED_ORIGINS=${SpaOrigin}
+              RABBITMQ_HOST=${RabbitMqHost}
+              RABBITMQ_PORT=${RabbitMqPort}
+              RABBITMQ_USER=${RabbitMqUser}
+              RABBITMQ_PASS=${RabbitMqPass}
+              RABBITMQ_VHOST=${RabbitMqVhost}
               ENVEOF
 
               chmod 600 /etc/pedidos360.env
@@ -199,3 +221,6 @@ Outputs:
   ALBDnsName:
     Description: DNS del ALB para configurar el API Gateway
     Value: !GetAtt LoadBalancer.DNSName
+  BackendSecurityGroupId:
+    Description: ID del segmento de seguridad del backend (usar en el SG del broker)
+    Value: !GetAtt BackendSecurityGroup.Id
