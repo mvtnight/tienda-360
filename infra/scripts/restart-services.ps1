@@ -29,6 +29,16 @@ function Start-Service($name, $port, $cmd) {
 
 Write-Host "`n=== SERVICIOS PEDIDOS360 ===" -ForegroundColor Cyan
 
+# RabbitMQ (cluster local de 2 nodos)
+if (Test-Port 5672) {
+    Write-Host "[OK] RabbitMQ local escuchando en :5672" -ForegroundColor Green
+} elseif ($Start) {
+    Write-Host "[..] Levantando cluster RabbitMQ (2 nodos)..." -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot "rabbitmq-cluster.ps1") up
+} else {
+    Write-Host "[--] RabbitMQ apagado (usa -Start para levantar)" -ForegroundColor Yellow
+}
+
 # Backend :8090
 $backendJar = Join-Path $repo "pedidos360-backend\target\pedidos360-backend.jar"
 Start-Service "Backend" 8090 "java -jar $backendJar"
@@ -41,6 +51,10 @@ if ($WithAws) {
     Write-Host "    PEDIDOS_API_URL = $AwsEndpoint" -ForegroundColor Gray
 }
 Start-Service "BFF" 8085 "java $bffArgs"
+
+# Admin :8091 (microservicio administrador de mensajeria)
+$adminJar = Join-Path $repo "pedidos360-admin\target\pedidos360-admin.jar"
+Start-Service "Admin" 8091 "java -jar $adminJar"
 
 # SPA :4200
 Start-Service "SPA" 4200 "cmd /c npm start"

@@ -121,4 +121,62 @@ class AdminControllerIT {
                         .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN))))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void creaExchangeBindingYLosElimina() throws Exception {
+        String cola = "it.cola.binding";
+        String exchange = "it.exchange.prueba";
+        String routing = "it.routing.#";
+
+        mockMvc.perform(post("/admin/queues")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"queueName\":\"" + cola + "\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/admin/exchanges")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exchangeName\":\"" + exchange + "\",\"type\":\"topic\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/admin/bindings")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"queueName\":\"" + cola + "\",\"exchangeName\":\"" + exchange
+                                + "\",\"routingKey\":\"" + routing + "\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(delete("/admin/bindings")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"queueName\":\"" + cola + "\",\"exchangeName\":\"" + exchange
+                                + "\",\"routingKey\":\"" + routing + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/admin/exchanges/" + exchange)
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/admin/queues/" + cola)
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void crearExchangeTipoInvalidoDevuelve400() throws Exception {
+        mockMvc.perform(post("/admin/exchanges")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exchangeName\":\"it.exchange.malo\",\"type\":\"xyz\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detalle.type").exists());
+    }
+
+    @Test
+    void eliminarExchangeInexistenteDevuelve404() throws Exception {
+        mockMvc.perform(delete("/admin/exchanges/exchange.que.no.existe.xyz")
+                        .with(jwt().authorities(new SimpleGrantedAuthority(ADMIN))))
+                .andExpect(status().isNotFound());
+    }
 }

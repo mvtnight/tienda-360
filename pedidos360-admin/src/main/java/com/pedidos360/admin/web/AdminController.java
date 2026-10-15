@@ -1,11 +1,13 @@
 package com.pedidos360.admin.web;
 
+import com.pedidos360.admin.dto.BindingRequest;
 import com.pedidos360.admin.dto.ColaRequest;
 import com.pedidos360.admin.dto.ColaResumen;
+import com.pedidos360.admin.dto.ExchangeRequest;
 import com.pedidos360.admin.dto.MensajeResumen;
 import com.pedidos360.admin.dto.PublicarEventoRequest;
 import com.pedidos360.admin.dto.PublicarEventoResponse;
-import com.pedidos360.admin.service.ColaAdminService;
+import com.pedidos360.admin.service.MensajeriaQueryService;
 import com.pedidos360.admin.service.RabbitAdminService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -28,7 +30,11 @@ import java.util.Map;
 
 /**
  * Microservicio administrador de la mensajeria Pedidos360.
- * Todo el recurso exige rol PEDIDOS_ADMIN (JWT de Azure AD).
+ *
+ * <p>La creacion/eliminacion de colas, exchanges y bindings se delega en
+ * {@link RabbitAdminService}; la consulta/purga/publicacion en
+ * {@link MensajeriaQueryService}. Todo el recurso exige rol PEDIDOS_ADMIN
+ * (JWT de Azure AD).
  */
 @RestController
 @RequestMapping("/admin")
@@ -36,59 +42,87 @@ import java.util.Map;
 @PreAuthorize("hasRole('PEDIDOS_ADMIN')")
 public class AdminController {
 
-    private final RabbitAdminService service;
-    private final ColaAdminService colaAdmin;
+    private final MensajeriaQueryService query;
+    private final RabbitAdminService rabbitAdmin;
 
-    public AdminController(RabbitAdminService service, ColaAdminService colaAdmin) {
-        this.service = service;
-        this.colaAdmin = colaAdmin;
+    public AdminController(MensajeriaQueryService query, RabbitAdminService rabbitAdmin) {
+        this.query = query;
+        this.rabbitAdmin = rabbitAdmin;
     }
+
+    // ---------- Consultas ----------
 
     @GetMapping("/queues")
     public List<ColaResumen> colas() {
-        return service.listarColas();
+        return query.listarColas();
     }
 
     @GetMapping("/dlq")
     public List<ColaResumen> dlqs() {
-        return service.listarColas().stream().filter(ColaResumen::esDlq).toList();
+        return query.listarColas().stream().filter(ColaResumen::esDlq).toList();
     }
 
     @GetMapping("/queues/{nombre}")
     public ColaResumen cola(@PathVariable String nombre) {
-        return service.obtenerCola(nombre);
-    }
-
-    /** Crea (declara) una cola dinamicamente via AmqpAdmin. */
-    @PostMapping("/queues")
-    @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, String> crearCola(@Valid @RequestBody ColaRequest request) {
-        colaAdmin.crear(request);
-        return Map.of("resultado", "Cola '" + request.queueName() + "' creada exitosamente");
-    }
-
-    /** Elimina una cola. */
-    @DeleteMapping("/queues/{nombre}")
-    public Map<String, String> eliminarCola(@PathVariable String nombre) {
-        colaAdmin.eliminar(nombre);
-        return Map.of("resultado", "Cola '" + nombre + "' eliminada exitosamente");
+        return query.obtenerCola(nombre);
     }
 
     @GetMapping("/queues/{nombre}/messages")
     public List<MensajeResumen> mensajes(
             @PathVariable String nombre,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int count) {
-        return service.verMensajes(nombre, count);
+        return query.verMensajes(nombre, count);
     }
 
     @DeleteMapping("/queues/{nombre}/messages")
     public Map<String, String> purgar(@PathVariable String nombre) {
-        service.purgar(nombre);
+        query.purgar(nombre);
         return Map.of("resultado", "Cola '" + nombre + "' purgada");
     }
 
     @PostMapping("/eventos")
     public PublicarEventoResponse publicar(@Valid @RequestBody PublicarEventoRequest request) {
-        return service.publicar(request);
+        return query.publicar(request);
+    }
+
+    // ---------- Administracion de topologia (AmqpAdmin) ----------
+
+    @PostMapping("/queues")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, String> crearCola(@Valid @RequestBody ColaRequest request) {
+        rabbitAdmin.crearCola(request);
+        return Map.of("resultado", "Cola '" + request.queueName() + "' creada exitosamente");
+    }
+
+    @DeleteMapping("/queues/{nombre}")
+    public Map<String, String> eliminarCola(@PathVariable String nombre) {
+        rabbitAdmin.eliminarCola(nombre);
+        return Map.of("resultado", "Cola '" + nombre + "' eliminada exitosamente");
+    }
+
+    @PostMapping("/exchanges")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, String> crearExchange(@Valid @RequestBody ExchangeRequest request) {
+        rabbitAdmin.crearExchange(request);
+        return Map.of("resultado", "Exchange '" + request.exchangeName() + "' creado exitosamente");
+    }
+
+    @DeleteMapping("/exchanges/{nombre}")
+    public Map<String, String> eliminarExchange(@PathVariable String nombre) {
+        rabbitAdmin.eliminarExchange(nombre);
+        return Map.of("resultado", "Exchange '" + nombre + "' eliminado exitosamente");
+    }
+
+    @PostMapping("/bindings")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, String> crearBinding(@Valid @RequestBody BindingRequest request) {
+        rabbitAdmin.crearBinding(request);
+        return Map.of("resultado", "Binding creado exitosamente");
+    }
+
+    @DeleteMapping("/bindings")
+    public Map<String, String> eliminarBinding(@Valid @RequestBody BindingRequest request) {
+        rabbitAdmin.eliminarBinding(request);
+        return Map.of("resultado", "Binding eliminado exitosamente");
     }
 }
